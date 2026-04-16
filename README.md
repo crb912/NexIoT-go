@@ -62,6 +62,13 @@ cmd      放采集逻辑
 
 ```
 
+## Study
+
+edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces
+
+1. 对于非标准格式的配置，如何接入
+2. 如何重写部分逻辑。 hand command的用法
+
 
 ## Build
 
@@ -190,3 +197,28 @@ make docker
 docker tag edge-gateway:dev registry.example.com/edge-gateway:1.0.0
 docker push registry.example.com/edge-gateway:1.0.0
 ```
+
+
+Bootstrap() 调用
+│
+├── 1. 解析命令行参数（-p, -cd, -cf, -i, -r, -cp 等）
+│
+├── 2. 加载配置文件（configuration.yaml）或从 Consul 拉取配置
+│
+├── 3. 向 Registry（Consul）注册本服务
+│
+├── 4. 连接 EdgeX 核心服务
+│        ├── core-metadata（设备、Profile、ProvisionWatcher）
+│        └── core-data / Message Bus（事件上报）
+│
+├── 5. 初始化缓存（设备、Profile、ProvisionWatcher 等）
+│
+├── 6. 调用 driver.Initialize(sdk) ← 用户自定义初始化逻辑
+│
+├── 7. 启动 REST API HTTP Server（设备命令路由）
+│
+├── 8. 启动 AutoEvents（自动采集事件）
+│
+├── 9. 调用 driver.Start() ← 用户初始化后置逻辑（新版本）
+│
+└── 10. 阻塞等待关闭信号（SIGTERM/SIGINT），触发 driver.Stop()

@@ -37,8 +37,8 @@ type CompositeDriver struct {
 	http   SubDriver
 }
 
-func NewCompositeDriver(modbus SubDriver) *CompositeDriver {
-	return &CompositeDriver{modbus: modbus}
+func NewCompositeDriver() *CompositeDriver {
+	return nil
 }
 
 // ---------- 生命周期 ----------
@@ -52,7 +52,7 @@ func (c *CompositeDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	}
 
 	// v2 的 AddCustomRoute 签名：(route string, handler http.HandlerFunc, methods ...string)
-	// 没有 v3 的 interfaces.Authenticated 参数
+	// 没有 v3 的 interfaces.go.Authenticated 参数
 	alarmHandler := handler.NewAlarmHandler(sdk.GetLoggingClient())
 	if err := sdk.AddRoute("/api/alarm", alarmHandler.HandleAlarm, http.MethodPost); err != nil {
 		return fmt.Errorf("register /api/alarm route: %w", err)

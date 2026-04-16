@@ -1,0 +1,19 @@
+// This package provides a simple example of a device service.
+package main
+
+import (
+	"better-iot-edge/internal/driver"
+
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
+)
+
+const (
+	// Global version for device-sdk-go, can be replaced by makefile.
+	serviceVersion = "1.0.0"
+	serviceName    = "better-iot-edge"
+)
+
+func main() {
+	composite := driver.NewCompositeDriver()
+	startup.Bootstrap(serviceName, serviceVersion, &composite)
+}

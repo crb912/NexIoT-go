@@ -1,7 +1,8 @@
-# Makefile
 .PHONY: build test lint run docker clean tidy
 
-SERVICE_NAME  := edge-gateway
+# Example: https://github.com/edgexfoundry/device-sdk-go/blob/v2.3.1/Makefile
+
+SERVICE_NAME  := better-iot-edge
 VERSION       := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BINARY        := ./bin/$(SERVICE_NAME)
 DOCKER_IMAGE  := $(SERVICE_NAME):$(VERSION)
@@ -44,3 +45,6 @@ run: build
 ## clean: 清理编译产物
 clean:
 	rm -rf bin/ coverage.out coverage.html
+
+vendor:
+	$(GO) mod vendor
