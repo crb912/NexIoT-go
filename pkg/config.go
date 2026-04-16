@@ -1,6 +1,6 @@
 // bertter-iot-edge/config/config.go
 
-package config
+package pkg
 
 import (
 	"fmt"

@@ -14,7 +14,7 @@ Writable:
 
 Service:
   Host: "localhost"
-  Port: 59999              # Edge Gateway REST API 监听端口
+  Port: 59901              # Edge Gateway REST API 监听端口
   StartupMsg: "Edge Gateway started"
   MaxResultCount: 1024
   MaxRequestSize: 0
@@ -70,13 +70,3 @@ Device:
   Discovery:
     Enabled: false             # 本网关使用静态预置，不需要自动发现
     Interval: "0"
-
-# ---------- 协议驱动私有配置 ----------
-# 通过 sdk.DriverConfigs() 读取，key=string, value=string
-  [Driver]
-  # HTTP Driver
-  HttpTimeout  = "5s"    # 单次 HTTP 请求超时（Go duration 格式）
-  HttpRetries  = "2"     # 失败后重试次数
-
-  # Modbus Driver（全局默认，可被 device protocols 覆盖）
-  ModbusTimeout = "3s"   # Modbus TCP 连接超时（预留，当前在代码中以常量定义）

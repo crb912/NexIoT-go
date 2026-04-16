@@ -1,44 +1,63 @@
 # res/devices/device-list.yaml
-# 静态设备预置（Static Provisioning）
-# SDK 启动时将这里的设备自动注册到 EdgeX core-metadata。
-# 修改此文件后使用 --overwriteDevices 标志重启服务即可更新。
+#   1.设备采集服务配置： 静态设备预置（Static Provisioning）
+#   2. Edge SDK启动时将这里的设备自动注册到 EdgeX core-metadata。
+#   3. TODO： 支持配置热更新
 
-# ── 设备 1：Modbus 温度传感器 ──────────────────────────────────────────────
-- name: "temperature-sensor-01"
-  profileName: "temperature-sensor"   # 对应 res/profiles/temperature.yaml
-  description: "车间 A 区温度传感器"
-  labels:
-    - "zone-A"
-    - "temperature"
-  adminState: "UNLOCKED"
-  operatingState: "UP"
-  # autoEvents 驱动 SDK 自动定时采集，无需在代码里写定时器
-  autoEvents:
-    - interval: "5s"       # 每 5 秒采集一次
-      onChange:  false      # false = 定期采集；true = 仅值变化时上报
-      sourceName: "readTemperature"   # 对应 temperature.yaml deviceCommands
-  # protocols 提供连接参数，会被传入 HandleReadCommands 的 protocols 参数
-  protocols:
-    modbus:
-      Address:  "192.168.1.10:502"   # Modbus TCP 地址，RTU 可改为串口路径如 "/dev/ttyUSB0"
-      SlaveID:  "1"                  # 从机地址（1–247）
 
-# ── 设备 2：HTTP 湿度传感器 ────────────────────────────────────────────────
-- name: "humidity-sensor-01"
-  profileName: "humidity-sensor"     # 对应 res/profiles/humidity.yaml
-  description: "车间 A 区湿度传感器"
-  labels:
-    - "zone-A"
-    - "humidity"
-  adminState: "UNLOCKED"
-  operatingState: "UP"
-  autoEvents:
-    - interval: "10s"
-      onChange:  false
-      sourceName: "readHumidity"
-    - interval: "30s"
-      onChange:  false
-      sourceName: "readAll"          # 同时采集湿度和温度补偿值
-  protocols:
-    http:
-      BaseURL: "http://192.168.1.20:8080"   # 湿度传感器 HTTP 服务地址
+# Pre-define Devices
+deviceList:
+  - name: Modbus-TCP-test-device
+    profileName: Test-Device-Modbus-Profile
+    description: >-
+      This device is a product for monitoring and controlling digital inputs and
+      outputs over a LAN.
+    labels:
+      - Air conditioner
+      - modbus TCP
+    protocols:
+      modbus-tcp:
+        Address: 0.0.0.0
+        Port: 1502
+        UnitID: 1
+        Timeout: 5
+        IdleTimeout: 5
+    autoEvents:
+      - interval: 20s
+        onChange: false
+        sourceName: HVACValues
+  - name: Modbus-RTU-test-device
+    profileName: Test-Device-Modbus-Profile
+    description: >-
+      This device is a product for monitoring and controlling digital inputs and
+      outputs over a LAN.
+    labels:
+      - Air conditioner
+      - modbus RTU
+    protocols:
+      modbus-rtu:
+        Address: /tmp/slave
+        UnitID: 1
+        BaudRate: 19200
+        DataBits: 8
+        StopBits: 1
+        Parity: 'N'
+        Timeout: 5
+        IdleTimeout: 5
+
+  # Pre-define Devices
+  - name: Modbus-TCP-Read-String
+    profileName: Test-Device-Modbus-String-Profile
+    description: use for auto read a string value
+    labels:
+      - modbus TCP
+    protocols:
+      modbus-tcp:
+        Address: 0.0.0.0
+        Port: 1502
+        UnitID: 1
+        Timeout: 5
+        IdleTimeout: 5
+    autoEvents:
+      - interval: 20s
+        onChange: false
+        sourceName: ReadString

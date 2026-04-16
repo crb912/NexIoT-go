@@ -29,6 +29,40 @@ edge-gateway/
 ├── Dockerfile
 └── docker-compose.yml        # Complete EdgeX development environment
 ```
+
+my:
+
+```text
+res /
+		configuration.yaml
+        devices / modbus 
+				device.json   定义设备可采集的资源（资源名称，寄存器地址,，值的类型， 默认值，最大值，最小值，描述。）
+										
+				app-config.yaml  定义设备服务（采名称，描述，协议，采集周期，超时，地址。 等）    "name": "modbus-device1",
+						参考： https://github.com/edgexfoundry/device-modbus-go/blob/main/cmd/res/devices/modbus.test.devices.yaml
+						"protocol": "modbus",
+							"address": "127.0.0.1",
+							"port": 5020,
+							"slave_id": 1,
+							"timeout_ms": 1000,
+
+				poll_interval_seconds: 5   # 采集(轮询)间隔      失败后重试次数
+		
+internal /
+     drivers
+                    / modbus        / 放协议
+     collector   data_collector  采集的管理， 任务调度
+  
+pkg   
+     models / 放数据模型
+     logger
+     utils 等
+     
+cmd      放采集逻辑
+
+```
+
+
 ## Build
 
 ### Install the ZeroMQ Development Library

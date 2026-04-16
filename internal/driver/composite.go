@@ -1,4 +1,4 @@
-// internal/driver/composite.go
+// Package driver internal/driver/composite.go
 package driver
 
 import (
@@ -37,8 +37,8 @@ type CompositeDriver struct {
 	http   SubDriver
 }
 
-func NewCompositeDriver(modbus, http SubDriver) *CompositeDriver {
-	return &CompositeDriver{modbus: modbus, http: http}
+func NewCompositeDriver(modbus SubDriver) *CompositeDriver {
+	return &CompositeDriver{modbus: modbus}
 }
 
 // ---------- 生命周期 ----------

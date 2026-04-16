@@ -38,8 +38,8 @@ run: build
 		--overwriteDevices
 
 ## docker: 构建 Docker 镜像
-docker:
-	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE) .
+##docker:
+##	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE) .
 
 ## clean: 清理编译产物
 clean:

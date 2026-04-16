@@ -3,11 +3,8 @@
 package main
 
 import (
-	"better-iot-edge/config"
 	"better-iot-edge/internal/driver"
-	httpdriver "better-iot-edge/internal/driver/http"
 	modbusdriver "better-iot-edge/internal/driver/modbus"
-	"fmt"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
@@ -21,17 +18,16 @@ const (
 //	var devices []Device
 //	err := config.Unmarshal(confg.Modbus, &devices, resCheck)
 //	_ = config.Unmarshal(confg.SNMP, &devices)
-//	err = config.UnmarshalFromfile(pathToMyfile, &devices, resCheck)
+//	err = config.UnmarshalFromfile(pathToMyFile, &devices, resCheck)
 //	_ = config.Unmarshal(confg.Modbus, &devices)
-//	err = config.MarshalToFile(pathToMyfile, &devices)
+//	err = config.MarshalToFile(pathToMyFile, &devices)
 //
 //}
 
 func main() {
 	modbusDrv := modbusdriver.NewDriver()
-	httpDrv := httpdriver.NewDriver()
 
-	composite := driver.NewCompositeDriver(modbusDrv, httpDrv)
-	fmt.Println(config.GetDeviceConfigPath(config.EnvProd, config.Modbus))
+	composite := driver.NewCompositeDriver(modbusDrv)
+	//fmt.Println(pkg.GetDeviceConfigPath(pkg.EnvProd, pkg.Modbus))
 	startup.Bootstrap(serviceName, serviceVersion, composite)
 }

@@ -1,0 +1,387 @@
+
+    {
+      "Id": "海德森SBMS",
+      "Type": "海德森SBMS",
+      "Points": [
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_nums",
+          "Name": "电池组数",
+          "Type": "AI",
+          "NodeID": "8003",
+          "AlarmLevel": "0",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_cells",
+          "Name": "第1组电池节数",
+          "Type": "",
+          "NodeID": "8004",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_cells",
+          "Name": "第2组电池节数",
+          "Type": "",
+          "NodeID": "8005",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_cells",
+          "Name": "第3组电池节数",
+          "Type": "",
+          "NodeID": "8006",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_cells",
+          "Name": "第4组电池节数",
+          "Type": "",
+          "NodeID": "8007",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_type",
+          "Name": "第1组电池类型",
+          "Type": "",
+          "NodeID": "8008",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_type",
+          "Name": "第2组电池类型",
+          "Type": "",
+          "NodeID": "8009",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_type",
+          "Name": "第3组电池类型",
+          "Type": "",
+          "NodeID": "8010",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_type",
+          "Name": "第4组电池类型",
+          "Type": "",
+          "NodeID": "8011",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_capacity",
+          "Name": "第1组电池安时数",
+          "Type": "",
+          "NodeID": "8012",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_capacity",
+          "Name": "第2组电池安时数",
+          "Type": "",
+          "NodeID": "8013",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_capacity",
+          "Name": "第3组电池安时数",
+          "Type": "",
+          "NodeID": "8014",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_capacity",
+          "Name": "第4组电池安时数",
+          "Type": "",
+          "NodeID": "8015",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "mac_address",
+          "Name": "网络Mac地址",
+          "Type": "",
+          "NodeID": "8023",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "ip_address",
+          "Name": "网络IP地址",
+          "Type": "",
+          "NodeID": "8026",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "gateway",
+          "Name": "网络网关",
+          "Type": "",
+          "NodeID": "8028",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "subnet_mask",
+          "Name": "网络掩码",
+          "Type": "",
+          "NodeID": "8030",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "dns",
+          "Name": "网络DNS",
+          "Type": "",
+          "NodeID": "8032",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "socket_port",
+          "Name": "Socket端口号",
+          "Type": "",
+          "NodeID": "8034",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "target_ip_address",
+          "Name": "目的IP地址",
+          "Type": "",
+          "NodeID": "8035",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_year",
+          "Name": "年",
+          "Type": "",
+          "NodeID": "8300",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_month",
+          "Name": "月",
+          "Type": "",
+          "NodeID": "8302",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_day",
+          "Name": "日",
+          "Type": "",
+          "NodeID": "8303",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_hour",
+          "Name": "时",
+          "Type": "",
+          "NodeID": "8304",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_minute",
+          "Name": "分",
+          "Type": "",
+          "NodeID": "8305",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "system_time_second",
+          "Name": "秒",
+          "Type": "",
+          "NodeID": "8306",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_voltage",
+          "Name": "第1组电池组总电压",
+          "Type": "",
+          "NodeID": "1000",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_voltage",
+          "Name": "第2组电池组总电压",
+          "Type": "",
+          "NodeID": "1001",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_voltage",
+          "Name": "第3组电池组总电压",
+          "Type": "",
+          "NodeID": "1002",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_voltage",
+          "Name": "第4组电池组总电压",
+          "Type": "",
+          "NodeID": "1003",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_current",
+          "Name": "第1组电池组总电流",
+          "Type": "",
+          "NodeID": "1004",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_current",
+          "Name": "第2组电池组总电流",
+          "Type": "",
+          "NodeID": "1005",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_current",
+          "Name": "第3组电池组总电流",
+          "Type": "",
+          "NodeID": "1006",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_current",
+          "Name": "第4组电池组总电流",
+          "Type": "",
+          "NodeID": "1007",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_1_alarm_tag",
+          "Name": "第1组电池组告警标志位",
+          "Type": "",
+          "NodeID": "1008",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_2_alarm_tag",
+          "Name": "第2组电池组告警标志位",
+          "Type": "",
+          "NodeID": "1009",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_3_alarm_tag",
+          "Name": "第3组电池组告警标志位",
+          "Type": "",
+          "NodeID": "1010",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        },
+        {
+          "DevId": "海德森SBMS",
+          "Id": "battery_pack_4_alarm_tag",
+          "Name": "第4组电池组告警标志位",
+          "Type": "",
+          "NodeID": "1011",
+          "AlarmLevel": "",
+          "AlarmId": "",
+          "Value": ""
+        }
+      ]
+    }
