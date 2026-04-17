@@ -2,36 +2,44 @@ package driver
 
 import (
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces"
+	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
-// Lifecycle  定义了协议驱动生命周期的接口， 该接口必须实现。
-type Lifecycle interface {
+type CustomProtocolDriver interface {
+	DeviceLifecycle
+	DeviceReader
+	DeviceWriter
+	DeviceManager
+}
+
+// DeviceLifecycle  定义了协议驱动生命周期的接口， 该接口必须实现。
+type DeviceLifecycle interface {
 	Initialize(sdk interfaces.DeviceServiceSDK) error
 	Start() error
 	Stop(force bool) error
 }
 
-// CommandReader 可选接口：命令处理（只读设备可只实现 Reader）
-type CommandReader interface {
+// DeviceReader 可选接口：命令处理（只读设备可只实现 Reader）
+type DeviceReader interface {
 	HandleReadCommands(
 		deviceName string,
-		protocols map[string]ProtocolProperties,
-		reqs []CommandRequest,
-	) ([]*CommandValue, error)
+		protocols map[string]models.ProtocolProperties,
+		reqs []sdkModels.CommandRequest,
+	) ([]*sdkModels.CommandValue, error)
 }
 
-type CommandWriter interface {
+// DeviceReader 可选接口：命令处理（只读设备可只实现 Reader）
+type DeviceWriter interface {
 	HandleWriteCommands(
 		deviceName string,
-		protocols map[string]ProtocolProperties,
-		reqs []CommandRequest,
-		params []*CommandValue,
-	) error
+		protocols map[string]models.ProtocolProperties,
+		reqs []sdkModels.CommandRequest,
+	) ([]*sdkModels.CommandValue, error)
 }
 
 // 职责三：设备事件（可选，用独立接口隔离）
-type DeviceWatcher interface {
+type DeviceManager interface {
 	AddDevice(deviceName string, protocols map[string]ProtocolProperties, adminState AdminState) error
 	UpdateDevice(deviceName string, protocols map[string]ProtocolProperties, adminState AdminState) error
 	RemoveDevice(deviceName string, protocols map[string]ProtocolProperties) error
@@ -39,9 +47,9 @@ type DeviceWatcher interface {
 
 // SDK 内部通过类型断言按需调用，而不是强制实现
 type ProtocolDriver interface {
-	Lifecycle
-	CommandReader
-	CommandWriter
+	DeviceLifecycle
+	DeviceReader
+	DeviceWriter
 }
 
 // 接口示例
