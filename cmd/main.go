@@ -14,6 +14,6 @@ const (
 )
 
 func main() {
-	composite := driver.NewCompositeDriver()
+	composite := driver.CompositeDriver{}
 	startup.Bootstrap(serviceName, serviceVersion, &composite)
 }

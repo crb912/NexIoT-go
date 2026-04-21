@@ -2,109 +2,201 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
-	"net/http"
+	"reflect"
+	"time"
 
+	"github.com/edgexfoundry/device-sdk-go/v2/example/config"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces"
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
-
-	"better-iot-edge/internal/handler"
+	gometrics "github.com/rcrowley/go-metrics"
 )
+
+const readCommandsExecutedName = "ReadCommandsExecuted"
 
 const (
 	ProtocolKeyModbus = "modbus"
 	ProtocolKeyHTTP   = "http"
 )
 
-// SubDriver 定义子驱动必须满足的接口。
-type SubDriver interface {
-	Initialize(sdk interfaces.DeviceServiceSDK) error
-	Start() error
-	Stop(force bool) error
-	HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) ([]*sdkModels.CommandValue, error)
-	HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest, params []*sdkModels.CommandValue) error
-	AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error
-	UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error
-	RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error
-	Discover() error
-	ValidateDevice(device models.Device) error
-}
-
 // CompositeDriver 持有所有子驱动，实现 EdgeX ProtocolDriver 接口。
 type CompositeDriver struct {
-	modbus SubDriver
-	http   SubDriver
+	lc                   logger.LoggingClient
+	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
+	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
+	counter              interface{}
+	stringArray          []string
+	readCommandsExecuted gometrics.Counter
+	serviceConfig        *config.ServiceConfig // user defined config
 }
 
-func NewCompositeDriver() *CompositeDriver {
+func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
+	c.lc = lc
+	c.asyncCh = asyncCh
+	c.deviceCh = deviceCh
+	c.serviceConfig = &config.ServiceConfig{}
+	c.counter = map[string]interface{}{
+		"f1": "ABC",
+		"f2": 123,
+	}
+	c.stringArray = []string{"foo", "bar"}
+
+	ds := interfaces.Service()
+
+	if err := ds.LoadCustomConfig(c.serviceConfig, "SimpleCustom"); err != nil {
+		return fmt.Errorf("unable to load 'SimpleCustom' custom configuration: %s", err.Error())
+	}
+	lc.Infof("Custom config is: %v", c.serviceConfig.SimpleCustom)
+
+	if err := c.serviceConfig.SimpleCustom.Validate(); err != nil {
+		return fmt.Errorf("'SimpleCustom' custom configuration validation failed: %s", err.Error())
+	}
+
+	// dynamic configuration hot update
+	if err := ds.ListenForCustomConfigChanges(
+		&c.serviceConfig.SimpleCustom.Writable,
+		"SimpleCustom/Writable", c.ProcessCustomConfigChanges); err != nil {
+		return fmt.Errorf("unable to listen for changes for 'SimpleCustom.Writable' custom configuration: %s", err.Error())
+	}
+
+	// Setup metrics
+	if err := c.initMetrics(); err != nil {
+		c.lc.Errorf("Failed to initialize metrics: %v", err)
+	}
+	c.lc.Info("Driver initialized")
 	return nil
 }
 
-// ---------- 生命周期 ----------
-
-func (c *CompositeDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
-	if err := c.modbus.Initialize(sdk); err != nil {
-		return fmt.Errorf("modbus driver Initialize: %w", err)
-	}
-	if err := c.http.Initialize(sdk); err != nil {
-		return fmt.Errorf("http driver Initialize: %w", err)
-	}
-
-	// v2 的 AddCustomRoute 签名：(route string, handler http.HandlerFunc, methods ...string)
-	// 没有 v3 的 interfaces.go.Authenticated 参数
-	alarmHandler := handler.NewAlarmHandler(sdk.GetLoggingClient())
-	if err := sdk.AddRoute("/api/alarm", alarmHandler.HandleAlarm, http.MethodPost); err != nil {
-		return fmt.Errorf("register /api/alarm route: %w", err)
+// Initialize all observability metrics for the driver
+// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
+func (c *CompositeDriver) initMetrics() error {
+	c.readCommandsExecuted = gometrics.NewCounter()
+	ds := interfaces.Service()
+	metricsManager := ds.GetMetricsManager()
+	// Check if metrics manager is available
+	if metricsManager == nil {
+		return errors.New("metrics manager not available")
 	}
 
-	sdk.GetLoggingClient().Info("custom route registered: POST /api/alarm")
+	// Register the counter metric for read commands
+	err := metricsManager.Register(readCommandsExecutedName, c.readCommandsExecuted, nil)
+	if err != nil {
+		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
+	}
+	c.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
 	return nil
+}
+
+// ProcessCustomConfigChanges ...hot-reload configuration
+// 配置热更新，不重启加载配置。
+func (c *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface{}) {
+	updated, ok := rawWritableConfig.(*config.SimpleWritable)
+	if !ok {
+		c.lc.Error("unable to process custom config updates: Can not cast raw config to type 'SimpleWritable'")
+		return
+	}
+
+	c.lc.Info("Received configuration updates for 'SimpleCustom.Writable' section")
+
+	previous := c.serviceConfig.SimpleCustom.Writable
+	c.serviceConfig.SimpleCustom.Writable = *updated
+
+	if reflect.DeepEqual(previous, *updated) {
+		c.lc.Info("No changes detected")
+		return
+	}
+
+	// Now check to determine what changed.
+	// In this example we only have the one writable setting,
+	// so the check is not really need but left here as an example.
+	// Since this setting is pulled from configuration each time it is need, no extra processing is required.
+	// This may not be true for all settings, such as external host connection info, which
+	// may require re-establishing the connection to the external host for example.
+	if previous.DiscoverSleepDurationSecs != updated.DiscoverSleepDurationSecs {
+		c.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
+	}
 }
 
 func (c *CompositeDriver) Start() error {
-	if err := c.modbus.Start(); err != nil {
-		return err
-	}
-	return c.http.Start()
-}
-
-func (c *CompositeDriver) Stop(force bool) error {
-	_ = c.modbus.Stop(force)
-	_ = c.http.Stop(force)
+	c.lc.Info("Driver Started")
 	return nil
 }
 
-// ---------- 读写命令路由 ----------
+// HandleReadCommands triggers a protocol Read operation for the specified device.
+// DeviceResourceName: 待读取的传感器/寄存器名称
+func (c *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
+	c.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
-func (c *CompositeDriver) HandleReadCommands(
-	deviceName string,
-	protocols map[string]models.ProtocolProperties,
-	reqs []sdkModels.CommandRequest,
-) ([]*sdkModels.CommandValue, error) {
-	drv, err := c.route(protocols)
-	if err != nil {
-		return nil, err
+	if len(reqs) == 1 {
+		res = make([]*sdkModels.CommandValue, 1)
+		if reqs[0].DeviceResourceName == "SwitchButton" {
+			cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeBool, false)
+			res[0] = cv
+		} else if reqs[0].DeviceResourceName == "Xrotation" {
+			cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeInt32, 111)
+			res[0] = cv
+		}
+	} else if len(reqs) == 2 {
+		res = make([]*sdkModels.CommandValue, 2)
+		for i, r := range reqs {
+			var cv *sdkModels.CommandValue
+			switch r.DeviceResourceName {
+			case "Xrotation":
+				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
+			case "Yrotation":
+				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
+			}
+			res[i] = cv
+		}
 	}
-	return drv.HandleReadCommands(deviceName, protocols, reqs)
+
+	c.readCommandsExecuted.Inc(1)
+
+	return
 }
 
-func (c *CompositeDriver) HandleWriteCommands(
-	deviceName string,
-	protocols map[string]models.ProtocolProperties,
-	reqs []sdkModels.CommandRequest,
-	params []*sdkModels.CommandValue,
-) error {
-	drv, err := c.route(protocols)
-	if err != nil {
-		return err
+// HandleWriteCommands passes a slice of CommandRequest struct each representing
+// a ResourceOperation for a specific device resource.
+// Since the commands are actuation commands, params provide parameters for the individual
+// command.
+// HandleWriteCommands 传入一个 CommandRequest 结构体切片，
+// 每个结构体对应一个特定设备资源的资源操作（ResourceOperation）。
+// 由于这些命令属于执行/驱动类命令，params 为单个命令提供参数。
+func (c *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
+	params []*sdkModels.CommandValue) error {
+
+	for index, r := range reqs {
+		c.lc.Debugf("Driver HandleWriteCommands: protocols: %v, resource: %v, parameters: %v, attributes: %v", protocols, reqs[index].DeviceResourceName, params[index], reqs[index].Attributes)
+		c.lc.Infof("Please write data value (%s) to resource (%s) ", params[index].Value, r.DeviceResourceName)
+
 	}
-	return drv.HandleWriteCommands(deviceName, protocols, reqs, params)
+	return nil
 }
 
-// ---------- 设备生命周期回调 ----------
+// Stop the protocol-specific DS code to shut down gracefully, or
+// if the force parameter is 'true', immediately. The driver is responsible
+// for closing any in-use channels, including the channel used to send async
+// readings (if supported).
+func (c *CompositeDriver) Stop(force bool) error {
+	if c.lc != nil {
+		c.lc.Debugf("Driver.Stop called: force=%v", force)
+	}
+	return nil
+}
 
+// -----------------------------------------------------------------------------
+//  						设备生命周期的回调函数
+// -----------------------------------------------------------------------------
+
+// AddDevice is a callback function that is invoked
+// when a new Device associated with this Device Service is added
 func (c *CompositeDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	c.lc.Debugf("a new Device is added: %s", deviceName)
+
 	drv, err := c.route(protocols)
 	if err != nil {
 		return err
@@ -112,7 +204,11 @@ func (c *CompositeDriver) AddDevice(deviceName string, protocols map[string]mode
 	return drv.AddDevice(deviceName, protocols, adminState)
 }
 
+// UpdateDevice is a callback function that is invoked
+// when a Device associated with this Device Service is updated
 func (c *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	c.lc.Debugf("Device %s is updated", deviceName)
+
 	drv, err := c.route(protocols)
 	if err != nil {
 		return err
@@ -120,7 +216,11 @@ func (c *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]m
 	return drv.UpdateDevice(deviceName, protocols, adminState)
 }
 
+// RemoveDevice is a callback function that is invoked
+// when a Device associated with this Device Service is removed
 func (c *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+	c.lc.Debugf("Device %s is removed", deviceName)
+
 	drv, err := c.route(protocols)
 	if err != nil {
 		return err
@@ -128,12 +228,35 @@ func (c *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]m
 	return drv.RemoveDevice(deviceName, protocols)
 }
 
-// ---------- 设备发现 ----------
+// Discover triggers protocol specific device discovery, which is an asynchronous operation.
+// Devices found as part of this discovery operation are written to the channel devices.
+// Discover 触发协议相关的设备发现，这是一个异步操作。
+// 本次发现过程中找到的设备，会写入到 devices 通道中。
+func (c *CompositeDriver) Discover() {
+	proto := make(map[string]models.ProtocolProperties)
+	proto["other"] = map[string]string{"Address": "simple02", "Port": "301"}
 
-func (c *CompositeDriver) Discover() error {
-	_ = c.modbus.Discover()
-	_ = c.http.Discover()
-	return nil
+	device2 := sdkModels.DiscoveredDevice{
+		Name:        "Simple-Device-for-test",
+		Protocols:   proto,
+		Description: "found by discovery",
+		Labels:      []string{"auto-discovery"},
+	}
+
+	proto = make(map[string]models.ProtocolProperties)
+	proto["other"] = map[string]string{"Address": "simple03", "Port": "399"}
+
+	device3 := sdkModels.DiscoveredDevice{
+		Name:        "Simple-Device03",
+		Protocols:   proto,
+		Description: "found by discovery",
+		Labels:      []string{"auto-discovery"},
+	}
+
+	res := []sdkModels.DiscoveredDevice{device2, device3}
+
+	time.Sleep(time.Duration(c.serviceConfig.SimpleCustom.Writable.DiscoverSleepDurationSecs) * time.Second)
+	c.deviceCh <- res
 }
 
 func (c *CompositeDriver) ValidateDevice(device models.Device) error {
@@ -148,10 +271,10 @@ func (c *CompositeDriver) ValidateDevice(device models.Device) error {
 
 func (c *CompositeDriver) route(protocols map[string]models.ProtocolProperties) (SubDriver, error) {
 	if _, ok := protocols[ProtocolKeyModbus]; ok {
-		return c.modbus, nil
+		return nil, nil
 	}
 	if _, ok := protocols[ProtocolKeyHTTP]; ok {
-		return c.http, nil
+		return nil, nil
 	}
 	return nil, fmt.Errorf("no supported protocol found in device protocols: %v", protocols)
 }
