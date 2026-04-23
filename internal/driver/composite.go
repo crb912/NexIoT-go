@@ -62,13 +62,13 @@ func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sd
 		"SimpleCustom/Writable", c.ProcessCustomConfigChanges); err != nil {
 		return fmt.Errorf("unable to listen for changes for 'SimpleCustom.Writable' custom configuration: %s", err.Error())
 	}
-
 	// Setup metrics
 	if err := c.initMetrics(); err != nil {
 		c.lc.Errorf("Failed to initialize metrics: %v", err)
 	}
 	c.lc.Info("Driver initialized")
 	return nil
+
 }
 
 // Initialize all observability metrics for the driver

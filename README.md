@@ -69,7 +69,24 @@ edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/
 1. 对于非标准格式的配置，如何接入
 2. 如何重写部分逻辑。 hand command的用法
 
+应用层:
 
+cmd/gateway/main.go - 应用入口点，处理命令行参数和生命周期
+internal/application/app.go - 网关核心应用程序，协调所有组件
+
+配置管理:
+
+internal/config/config.go - 灵活的YAML配置解析和验证
+
+协议驱动:
+
+internal/driver/factory.go - 驱动程序工厂，支持动态驱动创建
+internal/driver/modbus.go - Modbus TCP驱动实现（2个传感器）
+internal/driver/http.go - HTTP REST驱动实现（1个传感器）
+
+设备管理:
+
+internal/device/device.go - 设备生命周期管理和自动数据采集
 ## Build
 
 ### Install the ZeroMQ Development Library
@@ -90,7 +107,7 @@ sudo dnf install zeromq-devel pkgconf-pkg-config
 
 - Go 1.21+
 - Docker & Docker Compose
-
+- 
 ### 1. Start EdgeX Core Services
 
 Launch the minimal required EdgeX infrastructure:

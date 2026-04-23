@@ -3,6 +3,7 @@ package main
 
 import (
 	"better-iot-edge/internal/driver"
+	"fmt"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
@@ -16,4 +17,5 @@ const (
 func main() {
 	composite := driver.CompositeDriver{}
 	startup.Bootstrap(serviceName, serviceVersion, &composite)
+	fmt.Println("IoT edge stopped")
 }
