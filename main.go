@@ -10,7 +10,7 @@ import (
 
 // Global version for device-sdk-go, can be replaced by Makefile or post-commit hook.
 var serviceName = "better-iot-edge"
-var var serviceVersion = "dev-3a7c7ea" // AUTO_GENERATED
+var serviceVersion = "dev-81b77be" // AUTO_GENERATED
 
 func main() {
 	composite := driver.CompositeDriver{}

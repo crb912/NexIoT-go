@@ -1,8 +1,7 @@
 .PHONY: build test clean run unitest tidy lint
 
 SERVICE_NAME 		:= better-iot-edge
-SERVICE_VERSION     := "dev-3a7c7ea" # AUTO_GENERATED
-# SERVICE_VERSION		:= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+SERVICE_VERSION     := "dev-81b77be" # AUTO_GENERATED
 BINARY        		:= ./bin/$(SERVICE_NAME)
 ARCH				:=	$(shell uname -m)
 

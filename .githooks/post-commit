@@ -16,7 +16,7 @@ MAKE_PATTERN="^SERVICE_VERSION.*:=.*# AUTO_GENERATED"
 # Go file settings
 MAIN_GO="main.go"
 # Fix: Match serviceVersion instead of serviceName
-GO_PATTERN="serviceVersion.*=.*// AUTO_GENERATED"
+GO_PATTERN="^.*serviceVersion.*=.*// AUTO_GENERATED"
 # -----------------------------------
 
 # Lock file to stop infinite loop
