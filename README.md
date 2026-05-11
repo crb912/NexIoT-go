@@ -8,7 +8,7 @@ An IoT Edge Gateway based on EdgeX device-sdk-go v2. This service acts as a unif
 git clone
 
 git config core.hooksPath .githooks
-# or 
+# or
 make init
 ```
 

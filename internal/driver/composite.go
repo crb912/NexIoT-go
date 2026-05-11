@@ -38,14 +38,17 @@ func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sd
 	c.lc = lc
 	c.asyncCh = asyncCh
 	c.deviceCh = deviceCh
+	ds := interfaces.Service()
+
+	// Log the service version
+	c.lc.Infof("Starting %s: Version %s", ds.Name(), ds.Version())
+
 	c.serviceConfig = &config.ServiceConfig{}
 	c.counter = map[string]interface{}{
 		"f1": "ABC",
 		"f2": 123,
 	}
 	c.stringArray = []string{"foo", "bar"}
-
-	ds := interfaces.Service()
 
 	if err := ds.LoadCustomConfig(c.serviceConfig, "SimpleCustom"); err != nil {
 		return fmt.Errorf("unable to load 'SimpleCustom' custom configuration: %s", err.Error())
