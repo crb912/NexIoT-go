@@ -11,11 +11,12 @@ set -euo pipefail
 # ---------- Configuration ----------
 # Makefile settings
 MAKEFILE="Makefile"
-MAKE_PATTERN="^SERVICE_VERSION :=.*# AUTO_GENERATED"
+MAKE_PATTERN="^SERVICE_VERSION.*:=.*# AUTO_GENERATED"
 
 # Go file settings
 MAIN_GO="main.go"
-GO_PATTERN="serviceName.*=.*// AUTO_GENERATED"
+# Fix: Match serviceVersion instead of serviceName
+GO_PATTERN="serviceVersion.*=.*// AUTO_GENERATED"
 # -----------------------------------
 
 # Lock file to stop infinite loop
@@ -24,19 +25,16 @@ if [[ -f "$LOCK_FILE" ]]; then
     exit 0
 fi
 
-# Check if Makefile has the target line
 HAS_MAKE=0
 if [[ -f "$MAKEFILE" ]] && grep -qE "$MAKE_PATTERN" "$MAKEFILE"; then
     HAS_MAKE=1
 fi
 
-# Check if main.go has the target line
 HAS_GO=0
 if [[ -f "$MAIN_GO" ]] && grep -qE "$GO_PATTERN" "$MAIN_GO"; then
     HAS_GO=1
 fi
 
-# Exit if no files need update
 if [[ $HAS_MAKE -eq 0 ]] && [[ $HAS_GO -eq 0 ]]; then
     echo "[post-commit] No target lines found in Makefile or main.go. Skip."
     exit 0
@@ -60,17 +58,16 @@ esac
 # Update Makefile if needed
 if [[ $HAS_MAKE -eq 1 ]]; then
     "${SED_INPLACE[@]}" \
-        "s|${MAKE_PATTERN}.*|SERVICE_VERSION := ${NEW_VERSION}  # AUTO_GENERATED|" \
+        "s|${MAKE_PATTERN}.*|SERVICE_VERSION     := \"${NEW_VERSION}\" # AUTO_GENERATED|" \
         "$MAKEFILE"
     git add "$MAKEFILE"
     echo "[post-commit] Makefile updated -> ${NEW_VERSION}"
 fi
 
 # Update main.go if needed
-# Note: Go uses double quotes for strings
 if [[ $HAS_GO -eq 1 ]]; then
     "${SED_INPLACE[@]}" \
-        "s|${GO_PATTERN}.*|serviceName = \"${NEW_VERSION}\" // AUTO_GENERATED|" \
+        "s|${GO_PATTERN}.*|var serviceVersion = \"${NEW_VERSION}\" // AUTO_GENERATED|" \
         "$MAIN_GO"
     git add "$MAIN_GO"
     echo "[post-commit] main.go updated -> ${NEW_VERSION}"
