@@ -12,8 +12,6 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/goburrow/modbus"
-
-	"better-iot-edge/internal/transform"
 )
 
 const defaultTimeout = 3 * time.Second

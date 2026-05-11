@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# =============================================================================
+# post-commit hook 
+# Platform: Linux / macOS / Windows (Git Bash)
+# Location: .githooks/post-commit
+# Note: File must be saved with LF line endings
+# =============================================================================
+
+set -euo pipefail
+
+# ---------- Configuration ----------
+# Makefile settings
+MAKEFILE="Makefile"
+MAKE_PATTERN="^SERVICE_VERSION :=.*# AUTO_GENERATED"
+
+# Go file settings
+MAIN_GO="main.go"
+GO_PATTERN="serviceName.*=.*// AUTO_GENERATED"
+# -----------------------------------
+
+# Lock file to stop infinite loop
+LOCK_FILE=".git/.version-hook-running"
+if [[ -f "$LOCK_FILE" ]]; then
+    exit 0
+fi
+
+# Check if Makefile has the target line
+HAS_MAKE=0
+if [[ -f "$MAKEFILE" ]] && grep -qE "$MAKE_PATTERN" "$MAKEFILE"; then
+    HAS_MAKE=1
+fi
+
+# Check if main.go has the target line
+HAS_GO=0
+if [[ -f "$MAIN_GO" ]] && grep -qE "$GO_PATTERN" "$MAIN_GO"; then
+    HAS_GO=1
+fi
+
+# Exit if no files need update
+if [[ $HAS_MAKE -eq 0 ]] && [[ $HAS_GO -eq 0 ]]; then
+    echo "[post-commit] No target lines found in Makefile or main.go. Skip."
+    exit 0
+fi
+
+# Get branch name and commit ID
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+COMMIT=$(git rev-parse --short HEAD)
+NEW_VERSION="${BRANCH}-${COMMIT}"
+
+# Detect OS for sed syntax
+case "$OSTYPE" in
+    darwin*)
+        SED_INPLACE=(sed -i '')
+        ;;
+    *)
+        SED_INPLACE=(sed -i)
+        ;;
+esac
+
+# Update Makefile if needed
+if [[ $HAS_MAKE -eq 1 ]]; then
+    "${SED_INPLACE[@]}" \
+        "s|${MAKE_PATTERN}.*|SERVICE_VERSION := ${NEW_VERSION}  # AUTO_GENERATED|" \
+        "$MAKEFILE"
+    git add "$MAKEFILE"
+    echo "[post-commit] Makefile updated -> ${NEW_VERSION}"
+fi
+
+# Update main.go if needed
+# Note: Go uses double quotes for strings
+if [[ $HAS_GO -eq 1 ]]; then
+    "${SED_INPLACE[@]}" \
+        "s|${GO_PATTERN}.*|serviceName = \"${NEW_VERSION}\" // AUTO_GENERATED|" \
+        "$MAIN_GO"
+    git add "$MAIN_GO"
+    echo "[post-commit] main.go updated -> ${NEW_VERSION}"
+fi
+
+# Create lock file
+touch "$LOCK_FILE"
+
+# Amend the commit to include new file changes
+git commit --amend --no-edit --no-verify
+
+# Clean up lock file
+rm -f "$LOCK_FILE"

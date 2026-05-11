@@ -1,21 +1,26 @@
-.PHONY: build test lint run docker clean tidy
+.PHONY: build test clean run unitest tidy lint
 
-# Example: https://github.com/edgexfoundry/device-sdk-go/blob/v2.3.1/Makefile
-
-SERVICE_NAME  := better-iot-edge
-VERSION       := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-BINARY        := ./bin/$(SERVICE_NAME)
-DOCKER_IMAGE  := $(SERVICE_NAME):$(VERSION)
+SERVICE_NAME 		:= better-iot-edge
+SERVICE_VERSION     := "0.0.1"
+# SERVICE_VERSION		:= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BINARY        		:= ./bin/$(SERVICE_NAME)
+ARCH				:=	$(shell uname -m)
 
 ## build: 编译服务二进制
 build: tidy
 	@mkdir -p bin
-	CGO_ENABLED=1 go build -ldflags="-s -w -X main.serviceVersion=266420a" \
+	CGO_ENABLED=1 go build -ldflags="-s -w -X main.serviceVersion=${Version})" \
             -o ./bin/edge-gateway ./cmd/
+# Setup local environment and git hooks
+init:
+	git config core.hooksPath .githooks
+	@echo "Git hooks configured successfully."
 
-## test: 运行单元测试（不含集成测试）
-test:
-	go test -race -count=1 ./internal/... ./driver/...
+tidy:
+	go mod tidy
+
+unittest:
+	GO111MODULE=on go test $(GOTESTFLAGS) -coverprofile=coverage.out ./...
 
 ## test-cover: 测试并生成覆盖率报告
 test-cover:
@@ -24,11 +29,16 @@ test-cover:
 
 ## lint: 静态分析（需要安装 golangci-lint）
 lint:
-	golangci-lint run ./...
+	@which golangci-lint >/dev/null || echo "WARNING: go linter not installed. To install, run\n  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v1.46.2"
+	@if [ "z${ARCH}" = "zx86_64" ] && which golangci-lint >/dev/null ; then golangci-lint run --config .golangci.yml ; else echo "WARNING: Linting skipped (not on x86_64 or linter not installed)"; fi
 
-## tidy: 整理依赖
-tidy:
-	go mod tidy
+
+test: unittest lint
+	GO111MODULE=on go vet ./...
+	gofmt -l $$(find . -type f -name '*.go'| grep -v "/vendor/")
+	[ "`gofmt -l $$(find . -type f -name '*.go'| grep -v "/vendor/")`" = "" ]
+	./bin/test-attribution-txt.sh
+
 
 ## run: 本地运行（依赖 EdgeX 核心服务已通过 docker-compose 启动）
 run: build
@@ -37,10 +47,6 @@ run: build
 		--configFile=configuration.yaml \
 		--overwriteProfiles \
 		--overwriteDevices
-
-## docker: 构建 Docker 镜像
-##docker:
-##	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE) .
 
 ## clean: 清理编译产物
 clean:

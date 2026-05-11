@@ -8,11 +8,9 @@ import (
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
 
-const (
-	// Global version for device-sdk-go, can be replaced by makefile.
-	serviceVersion = "1.0.0"
-	serviceName    = "better-iot-edge"
-)
+// Global version for device-sdk-go, can be replaced by Makefile or post-commit hook.
+var serviceName = "better-iot-edge"
+var serviceVersion = "1.0.0" // AUTO_GENERATED
 
 func main() {
 	composite := driver.CompositeDriver{}

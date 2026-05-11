@@ -2,6 +2,16 @@
 
 An IoT Edge Gateway based on EdgeX device-sdk-go v2. This service acts as a unified Device Service supporting both Modbus TCP Temperature Sensors and HTTP REST Humidity Sensors within a single instance.
 
+## Quick Start
+
+```shell
+git clone
+
+git config core.hooksPath .githooks
+# or 
+make init
+```
+
 ## Project Structure
 
 ```
