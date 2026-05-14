@@ -34,6 +34,11 @@ type CompositeDriver struct {
 	serviceConfig        *config.ServiceConfig // user defined config
 }
 
+// --------------------------------------------------------------------------
+//  		| ProtocolDriver -- Lifespan management |
+//          Initialize, Star, Stop
+// --------------------------------------------------------------------------
+
 func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
 	c.lc = lc
 	c.asyncCh = asyncCh
@@ -74,60 +79,26 @@ func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sd
 
 }
 
-// Initialize all observability metrics for the driver
-// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
-func (c *CompositeDriver) initMetrics() error {
-	c.readCommandsExecuted = gometrics.NewCounter()
-	ds := interfaces.Service()
-	metricsManager := ds.GetMetricsManager()
-	// Check if metrics manager is available
-	if metricsManager == nil {
-		return errors.New("metrics manager not available")
-	}
-
-	// Register the counter metric for read commands
-	err := metricsManager.Register(readCommandsExecutedName, c.readCommandsExecuted, nil)
-	if err != nil {
-		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
-	}
-	c.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
-	return nil
-}
-
-// ProcessCustomConfigChanges ...hot-reload configuration
-// 配置热更新，不重启加载配置。
-func (c *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface{}) {
-	updated, ok := rawWritableConfig.(*config.SimpleWritable)
-	if !ok {
-		c.lc.Error("unable to process custom config updates: Can not cast raw config to type 'SimpleWritable'")
-		return
-	}
-
-	c.lc.Info("Received configuration updates for 'SimpleCustom.Writable' section")
-
-	previous := c.serviceConfig.SimpleCustom.Writable
-	c.serviceConfig.SimpleCustom.Writable = *updated
-
-	if reflect.DeepEqual(previous, *updated) {
-		c.lc.Info("No changes detected")
-		return
-	}
-
-	// Now check to determine what changed.
-	// In this example we only have the one writable setting,
-	// so the check is not really need but left here as an example.
-	// Since this setting is pulled from configuration each time it is need, no extra processing is required.
-	// This may not be true for all settings, such as external host connection info, which
-	// may require re-establishing the connection to the external host for example.
-	if previous.DiscoverSleepDurationSecs != updated.DiscoverSleepDurationSecs {
-		c.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
-	}
-}
-
 func (c *CompositeDriver) Start() error {
 	c.lc.Info("Driver Started")
 	return nil
 }
+
+// Stop the protocol-specific DS code to shut down gracefully, or
+// if the force parameter is 'true', immediately. The driver is responsible
+// for closing any in-use channels, including the channel used to send async
+// readings (if supported).
+func (c *CompositeDriver) Stop(force bool) error {
+	if c.lc != nil {
+		c.lc.Debugf("Driver.Stop called: force=%v", force)
+	}
+	return nil
+}
+
+// --------------------------------------------------------------------------
+//  		| ProtocolDriver -- Handle Commands |
+//          HandleReadCommands, HandleWriteCommands
+// --------------------------------------------------------------------------
 
 // HandleReadCommands triggers a protocol Read operation for the specified device.
 // DeviceResourceName: 待读取的传感器/寄存器名称
@@ -180,20 +151,10 @@ func (c *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[s
 	return nil
 }
 
-// Stop the protocol-specific DS code to shut down gracefully, or
-// if the force parameter is 'true', immediately. The driver is responsible
-// for closing any in-use channels, including the channel used to send async
-// readings (if supported).
-func (c *CompositeDriver) Stop(force bool) error {
-	if c.lc != nil {
-		c.lc.Debugf("Driver.Stop called: force=%v", force)
-	}
-	return nil
-}
-
-// -----------------------------------------------------------------------------
-//  						设备生命周期的回调函数
-// -----------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+//             | ProtocolDriver -- Device Event |
+// 				AddDevice, UpdateDevice, Discover
+// --------------------------------------------------------------------------
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
@@ -280,4 +241,54 @@ func (c *CompositeDriver) route(protocols map[string]models.ProtocolProperties) 
 		return nil, nil
 	}
 	return nil, fmt.Errorf("no supported protocol found in device protocols: %v", protocols)
+}
+
+// Initialize all observability metrics for the driver
+// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
+func (c *CompositeDriver) initMetrics() error {
+	c.readCommandsExecuted = gometrics.NewCounter()
+	ds := interfaces.Service()
+	metricsManager := ds.GetMetricsManager()
+	// Check if metrics manager is available
+	if metricsManager == nil {
+		return errors.New("metrics manager not available")
+	}
+
+	// Register the counter metric for read commands
+	err := metricsManager.Register(readCommandsExecutedName, c.readCommandsExecuted, nil)
+	if err != nil {
+		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
+	}
+	c.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
+	return nil
+}
+
+// ProcessCustomConfigChanges ...hot-reload configuration
+// 配置热更新，不重启加载配置。
+func (c *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface{}) {
+	updated, ok := rawWritableConfig.(*config.SimpleWritable)
+	if !ok {
+		c.lc.Error("unable to process custom config updates: Can not cast raw config to type 'SimpleWritable'")
+		return
+	}
+
+	c.lc.Info("Received configuration updates for 'SimpleCustom.Writable' section")
+
+	previous := c.serviceConfig.SimpleCustom.Writable
+	c.serviceConfig.SimpleCustom.Writable = *updated
+
+	if reflect.DeepEqual(previous, *updated) {
+		c.lc.Info("No changes detected")
+		return
+	}
+
+	// Now check to determine what changed.
+	// In this example we only have the one writable setting,
+	// so the check is not really need but left here as an example.
+	// Since this setting is pulled from configuration each time it is need, no extra processing is required.
+	// This may not be true for all settings, such as external host connection info, which
+	// may require re-establishing the connection to the external host for example.
+	if previous.DiscoverSleepDurationSecs != updated.DiscoverSleepDurationSecs {
+		c.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
+	}
 }

@@ -8,7 +8,7 @@ ARCH				:=	$(shell uname -m)
 ## build: 编译服务二进制
 build: tidy
 	@mkdir -p bin
-	CGO_ENABLED=1 go build -ldflags="-s -w -X main.serviceVersion=${Version})" \
+	CGO_ENABLED=1 go build -ldflags="-s -w -X device.Version=${SERVICE_VERSION} main.serviceName=${SERVICE_NAME}" \
             -o ./bin/edge-gateway ./cmd/
 # Setup local environment and git hooks
 init:
