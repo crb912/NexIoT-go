@@ -64,7 +64,6 @@ type BatchReader interface {
 }
 
 type RWClient interface {
-	LifeSpan
 	Reader
 	Writer
 	GetProtocolType() ProType
