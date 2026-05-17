@@ -1,0 +1,47 @@
+# Pre-define Devices
+deviceList:
+  - name: Modbus-TCP-RTU-test-device
+    profileName: Test-Device-Modbus-Profile
+    description: >-
+      This device is a product for monitoring and controlling digital inputs and outputs.
+    labels:
+      - Air conditioner
+      - modbus TCP
+      - modbus RTU
+    protocols:
+      modbus-tcp:
+        enabled: true
+        Address: 0.0.0.0
+        Port: 1502
+        UnitID: 1
+        Timeout: 5
+        IdleTimeout: 5
+
+      modbus-rtu:
+        enabled: false
+        Address: /tmp/slave
+        UnitID: 1
+        BaudRate: 19200
+        DataBits: 8
+        StopBits: 1
+        Parity: 'N'
+        Timeout: 5
+        IdleTimeout: 5
+
+    # Define how resources are read/written
+    resourcePolicies:
+    - sourceName: ReadString          # Matches the sourceName in autoEvents
+      readStrategy:
+        type: "continuous"            # Strategy type: read all at once
+        maxRetry: 3
+
+    - sourceName: ReadMultipleHolding # Another hypothetical resource
+      readStrategy:
+        type: "chunked"               # Strategy type: split into smaller reads
+        chunkSize: 30                 # Only read 30 registers at a time
+        delayBetweenChunks: 50ms      # Optional: sleep time to avoid overloading device
+
+    autoEvents:
+      - interval: 20s
+        onChange: false
+        sourceName: ReadString   # Will trigger the "continuous" strategy

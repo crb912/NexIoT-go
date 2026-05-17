@@ -1,0 +1,60 @@
+name: "Test-Device-Modbus-Profile"
+manufacturer: "no manufacturer"
+model: "CoolMasterNet"
+labels:
+  - "HVAC"
+  - "Air conditioner"
+  # - "no label"
+description: "this profile is testing  read modbus devices value with read"
+
+deviceResources:
+  -
+    name: "SwitchA"
+    isHidden: false
+    description: "On/Off , 0-OFF 1-ON"
+    attributes:
+      { primaryTable: "COILS", startingAddress: 0 }
+    properties:
+      valueType: "Bool"   # (定义资源的数据类型，支持Bool，Int16，Int32，Float32...等golang类型)
+      readWrite: "R"
+      scale: 1
+      minimum: 0
+      maximum: 1
+      defaultValue: "0"
+  -
+    name: "OperationMode"
+    isHidden: true
+    description: "0-Cool 1-Heat 2-Auto 3-Dry 4-HAUX 5-Fan 6-HH 8-VAM Auto 9-VAM Bypass 10-VAM Heat Exc 11-VAM Normal"
+    attributes:
+      { primaryTable: "HOLDING_REGISTERS", startingAddress: 1 }
+    properties:
+      valueType: "Int16"
+      readWrite: "RW"
+      scale: 1
+      minimum: 0
+      maximum: 11
+      defaultValue: "0"
+
+  -
+    name: "StringA"
+    description: "no description"
+    attributes:
+      { primaryTable: "INPUT_REGISTERS", startingAddress: 1, stringRegisterSize: 1}
+    properties:
+      valueType: "String"
+      readWrite: "R"
+
+deviceCommands:
+  -
+    name: "Values"
+    readWrite: "RW"
+    isHidden: false
+    resourceOperations:
+      - { deviceResource: "SwitchA", mappings: {"true":"ON","false":"OFF"} }
+      - { deviceResource: "OperationMode", mappings: { "0":"Cool","1":"Heat","2":"Auto","3":"Dry","4":"HAUX","5":"Fan","6":"HH","8":"VAM Auto","9":"VAM Bypass","10":"VAM Heat","11":"VAM Normal"} }
+  -
+    name: "ReadString"
+    readWrite: "R"
+    isHidden: false
+    resourceOperations:
+      - { deviceResource: "StringA"}
