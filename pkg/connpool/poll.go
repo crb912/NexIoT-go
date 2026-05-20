@@ -67,7 +67,7 @@ func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string
 	protocolAdapter, exists := p.clients[key]
 	p.mu.RUnlock()
 
-	if exists && protocolAdapter.IsConnect() {
+	if exists && protocolAdapter.IsConnected() {
 		return protocolAdapter, nil
 	}
 
@@ -77,7 +77,7 @@ func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string
 
 	// Double-check after acquiring the write lock.
 	protocolAdapter, exists = p.clients[key]
-	if exists && protocolAdapter.IsConnect() {
+	if exists && protocolAdapter.IsConnected() {
 		return protocolAdapter, nil
 	}
 

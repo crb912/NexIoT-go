@@ -119,7 +119,7 @@ func (m *ModbusClient) GetProtocolType() adapter.ProtocolType {
 // IsConnect checks whether the modbus connpool is still connected to the device.
 // It verifies the connection by attempting a lightweight read of a holding register.
 // Returns true if the connection is alive, false otherwise.
-func (m *ModbusClient) IsConnect() bool {
+func (m *ModbusClient) IsConnected() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

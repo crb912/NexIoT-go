@@ -17,28 +17,28 @@ type Writer interface {
 	WriteBatch(points []adapter.Resource) error // 连续写 n 个点
 }
 
-// Session Manage lifecycle API
+// Session manages the lifecycle of a connection.
 type Session interface {
 	Connect() error
 	Disconnect() error
-	IsConnect() bool
+	IsConnected() bool
 }
 
-// ReaderAdapter extends the Reader interface with lifecycle management.
+// ReaderAdapter embeds the Reader interface with lifecycle management.
 type ReaderAdapter interface {
 	Session
 	Reader
 	GetProtocolType() adapter.ProtocolType
 }
 
-// WriterAdapter extends the Writer interface with lifecycle management.
+// WriterAdapter embeds the Writer interface with lifecycle management.
 type WriterAdapter interface {
 	Session
 	Writer
 	GetProtocolType() adapter.ProtocolType
 }
 
-// RWAdapter extends the Reader and Writer interface with lifecycle management.
+// RWAdapter embeds the Reader and Writer interfaces with lifecycle management.
 type RWAdapter interface {
 	Session
 	Reader

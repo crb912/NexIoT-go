@@ -401,7 +401,7 @@ func TestIsConnect_NilClient(t *testing.T) {
 	t.Parallel()
 
 	mc := &ModbusClient{client: nil, connected: false}
-	if mc.IsConnect() {
+	if mc.IsConnected() {
 		t.Error("IsConnect() should be false when connpool is nil")
 	}
 }
@@ -413,7 +413,7 @@ func TestIsConnect_ConnectedFlagFalse(t *testing.T) {
 	mc := newMockedModbusClient(mock)
 	mc.connected = false
 
-	if mc.IsConnect() {
+	if mc.IsConnected() {
 		t.Error("IsConnect() should be false when connected flag is false")
 	}
 	// ReadRegisters should NOT be called if the flag is already false.
@@ -431,7 +431,7 @@ func TestIsConnect_TransportAlive(t *testing.T) {
 	}
 	mc := newMockedModbusClient(mock)
 
-	if !mc.IsConnect() {
+	if !mc.IsConnected() {
 		t.Error("IsConnect() should be true when ReadRegisters succeeds")
 	}
 }
@@ -445,7 +445,7 @@ func TestIsConnect_ProtocolErrorKeepsConnectionAlive(t *testing.T) {
 	}
 	mc := newMockedModbusClient(mock)
 
-	if !mc.IsConnect() {
+	if !mc.IsConnected() {
 		t.Error("IsConnect() should remain true on a protocol-level error")
 	}
 	if !mc.connected {
@@ -472,7 +472,7 @@ func TestIsConnect_TransportErrors_MarkDisconnected(t *testing.T) {
 			mock := &mockModbusClient{readErr: fmt.Errorf("dial tcp: %s", errMsg)}
 			mc := newMockedModbusClient(mock)
 
-			if mc.IsConnect() {
+			if mc.IsConnected() {
 				t.Errorf("IsConnect() should be false for transport error: %q", errMsg)
 			}
 			if mc.connected {
@@ -840,7 +840,7 @@ func TestIsConnect_ConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < workers; i++ {
 		go func() {
-			mc.IsConnect()
+			mc.IsConnected()
 			done <- struct{}{}
 		}()
 	}
@@ -863,7 +863,7 @@ func TestDisconnect_ConcurrentAccess(t *testing.T) {
 			}
 			done <- struct{}{}
 		}() //nolint:errcheck
-		go func() { mc.IsConnect(); done <- struct{}{} }()
+		go func() { mc.IsConnected(); done <- struct{}{} }()
 
 		<-done
 		<-done
