@@ -5,6 +5,13 @@ import (
 	"context"
 )
 
+// Session manages the lifecycle of a connection.
+type Session interface {
+	Connect() error
+	Disconnect() error
+	IsConnected() bool
+}
+
 // Reader defines the standard read interface for all protocol plugins.
 type Reader interface {
 	ReadSingle(pointID string) (adapter.Resource, error)
@@ -15,13 +22,6 @@ type Reader interface {
 type Writer interface {
 	WriteSingle(addr string, value interface{}) error
 	WriteBatch(points []adapter.Resource) error // 连续写 n 个点
-}
-
-// Session manages the lifecycle of a connection.
-type Session interface {
-	Connect() error
-	Disconnect() error
-	IsConnected() bool
 }
 
 // ReaderAdapter embeds the Reader interface with lifecycle management.
