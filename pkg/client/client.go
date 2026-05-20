@@ -3,21 +3,7 @@ package client
 
 import (
 	"better-iot-edge/pkg/adapter"
-	"time"
 )
-
-type ProType string
-
-const ModbusProtocol ProType = "modbus-"
-
-// Config represents the unified configuration for any protocol.
-// This is usually parsed from config.toml or JSON.
-type Config struct {
-	protocol ProType       // e.g., "modbus-tcp", "modbus-rtu", "opcua", "http"
-	Endpoint string        // e.g., "tcp://127.0.0.1:502" or "/dev/ttyUSB0"
-	Timeout  time.Duration // Connection and read timeout
-	// You can add more protocol-specific settings here if needed
-}
 
 // Reader defines the standard read interface for all protocol plugins.
 type Reader interface {
@@ -30,7 +16,7 @@ type Reader interface {
 type ReaderClient interface {
 	Connect() error
 	Disconnect() error
-	GetProtocolType() ProType
+	GetProtocolType() adapter.ProtocolType
 	Reader
 }
 
@@ -39,7 +25,7 @@ type ReaderClient interface {
 type ProtocolAdapter interface {
 	Connect() error
 	Disconnect() error
-	GetProtocolType() ProType
+	GetProtocolType() adapter.ProtocolType
 	IsConnect() bool
 	Reader
 }
@@ -47,7 +33,7 @@ type ProtocolAdapter interface {
 type WriterClient interface {
 	Connect() error
 	Disconnect() error
-	GetProtocolType() ProType
+	GetProtocolType() adapter.ProtocolType
 	Writer
 }
 
@@ -68,5 +54,5 @@ type BatchReader interface {
 type RWClient interface {
 	Reader
 	Writer
-	GetProtocolType() ProType
+	GetProtocolType() adapter.ProtocolType
 }

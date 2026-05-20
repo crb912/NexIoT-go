@@ -12,8 +12,6 @@ import (
 	"github.com/simonvetter/modbus"
 )
 
-// ─── Minimal interface that wraps the third-party client ─────────────────────
-
 // modbusClientIface declares only the methods that ModbusClient actually calls.
 // The real *modbus.ModbusClient satisfies this interface automatically.
 type modbusClientIface interface {
@@ -27,7 +25,8 @@ type ModbusClient struct {
 	// EndPoint is the target address (e.g., "tcp://192.168.1.100:502" or "rtu:///dev/ttyUSB0")
 	EndPoint string
 	// Timeout is the max time to wait for a reply
-	Timeout time.Duration
+	ProtocolType ProtocolType
+	Timeout      time.Duration
 	// BaudRate is for RTU only (e.g., 9600, 115200)
 	BaudRate uint
 	// DataBits is for RTU only (usually 8)
@@ -113,7 +112,7 @@ func (m *ModbusClient) Disconnect() error {
 }
 
 func (m *ModbusClient) GetProtocolType() ProtocolType {
-	return ProtocolModbusTcp
+	return m.ProtocolType
 }
 
 // IsConnect checks whether the modbus client is still connected to the device.

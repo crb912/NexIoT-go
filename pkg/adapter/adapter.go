@@ -6,7 +6,9 @@ type ProtocolType string
 
 const (
 	ProtocolMQTT      ProtocolType = "mqtt"
-	ProtocolModbusTcp ProtocolType = "modbus-tcp" // 👈 就是这个
+	ProtocolModbusTCP ProtocolType = "modbus-tcp"
+	ProtocolModbusRTU ProtocolType = "modbus-rtu"
+	ProtocolUnknown   ProtocolType = "unknown"
 )
 
 // Resource represents a single piece of data read from a device.

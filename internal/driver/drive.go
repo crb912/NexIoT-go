@@ -2,6 +2,7 @@
 package driver
 
 import (
+	"better-iot-edge/pkg/client"
 	"errors"
 	"fmt"
 	"reflect"
@@ -81,6 +82,9 @@ func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sd
 
 func (c *CompositeDriver) Start() error {
 	c.lc.Info("Driver Started")
+
+	client.NewPool(client.WithMaxCounts(30), client.WithTimeout(3*time.Second))
+	c.lc.Info("IoT Clients Poll Started")
 	return nil
 }
 

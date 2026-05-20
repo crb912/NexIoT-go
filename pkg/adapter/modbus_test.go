@@ -299,8 +299,8 @@ func TestParseAndCalculateSpan_OffsetMapping(t *testing.T) {
 
 func TestGetProtocolType(t *testing.T) {
 	mc := &ModbusClient{}
-	if got := mc.GetProtocolType(); got != ProtocolModbusTcp {
-		t.Errorf("GetProtocolType() = %q, want %q", got, ProtocolModbusTcp)
+	if got := mc.GetProtocolType(); got != ProtocolModbusTCP {
+		t.Errorf("GetProtocolType() = %q, want %q", got, ProtocolModbusTCP)
 	}
 }
 
