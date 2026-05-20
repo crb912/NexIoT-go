@@ -32,3 +32,10 @@ type Resource struct {
 	// Error holds the specific failure reason if IsValid is false.
 	Error error
 }
+
+// AsyncData defines the unified structure for pushed data
+type AsyncData struct {
+	DeviceName   string
+	ResourceName string
+	Value        interface{}
+}

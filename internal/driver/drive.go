@@ -2,7 +2,9 @@
 package driver
 
 import (
+	"better-iot-edge/pkg/adapter"
 	"better-iot-edge/pkg/connpool"
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -28,11 +30,16 @@ const (
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
+	dataCh               chan *adapter.AsyncData             // Bridge channel between Receivers and EdgeX
 	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
+	ctx                  context.Context
+	cancel               context.CancelFunc
 	counter              interface{}
 	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
+	polls                poll.Polls
+	receivers            []connpool.ReceiverAdapter
 }
 
 // --------------------------------------------------------------------------
@@ -40,51 +47,68 @@ type CompositeDriver struct {
 //          Initialize, Star, Stop
 // --------------------------------------------------------------------------
 
-func (c *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
-	c.lc = lc
-	c.asyncCh = asyncCh
-	c.deviceCh = deviceCh
+func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
+	cd.lc = lc
+	cd.asyncCh = asyncCh
+	cd.deviceCh = deviceCh
+	cd.ctx, cd.cancel = context.WithCancel(context.Background())
+
+	// Initialize channel with buffer size based on expected concurrency
+	cd.dataCh = make(chan *adapter.AsyncData, 100)
+
 	ds := interfaces.Service()
-
 	// Log the service version
-	c.lc.Infof("Starting %s: Version %s", ds.Name(), ds.Version())
+	cd.lc.Infof("Starting %s: Version %s", ds.Name(), ds.Version())
 
-	c.serviceConfig = &config.ServiceConfig{}
-	c.counter = map[string]interface{}{
+	cd.serviceConfig = &config.ServiceConfig{}
+	cd.counter = map[string]interface{}{
 		"f1": "ABC",
 		"f2": 123,
 	}
-	c.stringArray = []string{"foo", "bar"}
+	cd.stringArray = []string{"foo", "bar"}
 
-	if err := ds.LoadCustomConfig(c.serviceConfig, "SimpleCustom"); err != nil {
+	if err := ds.LoadCustomConfig(cd.serviceConfig, "SimpleCustom"); err != nil {
 		return fmt.Errorf("unable to load 'SimpleCustom' custom configuration: %s", err.Error())
 	}
-	lc.Infof("Custom config is: %v", c.serviceConfig.SimpleCustom)
+	lc.Infof("Custom config is: %v", cd.serviceConfig.SimpleCustom)
 
-	if err := c.serviceConfig.SimpleCustom.Validate(); err != nil {
+	if err := cd.serviceConfig.SimpleCustom.Validate(); err != nil {
 		return fmt.Errorf("'SimpleCustom' custom configuration validation failed: %s", err.Error())
 	}
-
 	// dynamic configuration hot update
 	if err := ds.ListenForCustomConfigChanges(
-		&c.serviceConfig.SimpleCustom.Writable,
-		"SimpleCustom/Writable", c.ProcessCustomConfigChanges); err != nil {
+		&cd.serviceConfig.SimpleCustom.Writable,
+		"SimpleCustom/Writable", cd.ProcessCustomConfigChanges); err != nil {
 		return fmt.Errorf("unable to listen for changes for 'SimpleCustom.Writable' custom configuration: %s", err.Error())
 	}
 	// Setup metrics
-	if err := c.initMetrics(); err != nil {
-		c.lc.Errorf("Failed to initialize metrics: %v", err)
+	if err := cd.initMetrics(); err != nil {
+		cd.lc.Errorf("Failed to initialize metrics: %v", err)
 	}
-	c.lc.Info("Driver initialized")
+	cd.lc.Info("Driver initialized")
 	return nil
 
 }
 
-func (c *CompositeDriver) Start() error {
-	c.lc.Info("Driver Started")
+func (cd *CompositeDriver) Start() error {
+	cd.lc.Info("Driver Started")
 
-	connpool.New(connpool.WithMaxCounts(30), connpool.WithTimeout(3*time.Second))
-	c.lc.Info("IoT Clients Poll Started")
+	connpool.New(
+		connpool.WithMaxCounts(30),
+		connpool.WithTimeout(5*time.Second))
+	cd.lc.Info("IoT Clients Poll Started")
+
+	//  Start the internal consumer goroutine
+	go cd.processAsyncData()
+	// 2. Initialize passive receivers (e.g., HTTP Receiver)
+	recvs := connpool.NewReceivers(":8080")
+	cd.receivers = recvs
+	// Start all receivers, passing the internal channel to them
+	for _, rx := range cd.receivers {
+		if err := rx.Start(cd.ctx, cd.dataCh); err != nil {
+			cd.lc.Errorf("Failed to start receiver: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -92,9 +116,18 @@ func (c *CompositeDriver) Start() error {
 // if the force parameter is 'true', immediately. The driver is responsible
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
-func (c *CompositeDriver) Stop(force bool) error {
-	if c.lc != nil {
-		c.lc.Debugf("Driver.Stop called: force=%v", force)
+func (cd *CompositeDriver) Stop(force bool) error {
+	if cd.lc != nil {
+		cd.lc.Debugf("Driver.Stop called: force=%v", force)
+	}
+	// Notify all background goroutines to exit
+	cd.cancel()
+	// Stop receivers one by one
+	for _, rx := range cd.receivers {
+		err := rx.Stop()
+		if err != nil {
+			cd.lc.Errorf("Driver.Stop err: %v", err)
+		}
 	}
 	return nil
 }
@@ -106,8 +139,8 @@ func (c *CompositeDriver) Stop(force bool) error {
 
 // HandleReadCommands triggers a protocol Read operation for the specified device.
 // DeviceResourceName: 待读取的传感器/寄存器名称
-func (c *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
-	c.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
+func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
+	cd.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
 	if len(reqs) == 1 {
 		res = make([]*sdkModels.CommandValue, 1)
@@ -132,7 +165,7 @@ func (c *CompositeDriver) HandleReadCommands(deviceName string, protocols map[st
 		}
 	}
 
-	c.readCommandsExecuted.Inc(1)
+	cd.readCommandsExecuted.Inc(1)
 
 	return
 }
@@ -144,12 +177,12 @@ func (c *CompositeDriver) HandleReadCommands(deviceName string, protocols map[st
 // HandleWriteCommands 传入一个 CommandRequest 结构体切片，
 // 每个结构体对应一个特定设备资源的资源操作（ResourceOperation）。
 // 由于这些命令属于执行/驱动类命令，params 为单个命令提供参数。
-func (c *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
+func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
 	params []*sdkModels.CommandValue) error {
 
 	for index, r := range reqs {
-		c.lc.Debugf("Driver HandleWriteCommands: protocols: %v, resource: %v, parameters: %v, attributes: %v", protocols, reqs[index].DeviceResourceName, params[index], reqs[index].Attributes)
-		c.lc.Infof("Please write data value (%s) to resource (%s) ", params[index].Value, r.DeviceResourceName)
+		cd.lc.Debugf("Driver HandleWriteCommands: protocols: %v, resource: %v, parameters: %v, attributes: %v", protocols, reqs[index].DeviceResourceName, params[index], reqs[index].Attributes)
+		cd.lc.Infof("Please write data value (%s) to resource (%s) ", params[index].Value, r.DeviceResourceName)
 
 	}
 	return nil
@@ -162,10 +195,10 @@ func (c *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[s
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
-func (c *CompositeDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	c.lc.Debugf("a new Device is added: %s", deviceName)
+func (cd *CompositeDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	cd.lc.Debugf("a new Device is added: %s", deviceName)
 
-	drv, err := c.route(protocols)
+	drv, err := cd.route(protocols)
 	if err != nil {
 		return err
 	}
@@ -174,10 +207,10 @@ func (c *CompositeDriver) AddDevice(deviceName string, protocols map[string]mode
 
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
-func (c *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	c.lc.Debugf("Device %s is updated", deviceName)
+func (cd *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	cd.lc.Debugf("Device %s is updated", deviceName)
 
-	drv, err := c.route(protocols)
+	drv, err := cd.route(protocols)
 	if err != nil {
 		return err
 	}
@@ -186,10 +219,10 @@ func (c *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]m
 
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
-func (c *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
-	c.lc.Debugf("Device %s is removed", deviceName)
+func (cd *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+	cd.lc.Debugf("Device %s is removed", deviceName)
 
-	drv, err := c.route(protocols)
+	drv, err := cd.route(protocols)
 	if err != nil {
 		return err
 	}
@@ -200,7 +233,7 @@ func (c *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]m
 // Devices found as part of this discovery operation are written to the channel devices.
 // Discover 触发协议相关的设备发现，这是一个异步操作。
 // 本次发现过程中找到的设备，会写入到 devices 通道中。
-func (c *CompositeDriver) Discover() {
+func (cd *CompositeDriver) Discover() {
 	proto := make(map[string]models.ProtocolProperties)
 	proto["other"] = map[string]string{"Address": "simple02", "Port": "301"}
 
@@ -223,12 +256,39 @@ func (c *CompositeDriver) Discover() {
 
 	res := []sdkModels.DiscoveredDevice{device2, device3}
 
-	time.Sleep(time.Duration(c.serviceConfig.SimpleCustom.Writable.DiscoverSleepDurationSecs) * time.Second)
-	c.deviceCh <- res
+	time.Sleep(time.Duration(cd.serviceConfig.SimpleCustom.Writable.DiscoverSleepDurationSecs) * time.Second)
+	cd.deviceCh <- res
 }
 
-func (c *CompositeDriver) ValidateDevice(device models.Device) error {
-	drv, err := c.route(device.Protocols)
+// processAsyncData reads from dataCh and pushes to EdgeX
+func (cd *CompositeDriver) processAsyncData() {
+	for {
+		select {
+		case <-cd.ctx.Done():
+			// Exit loop when Driver stops
+			return
+		case data := <-cd.dataCh:
+			// Convert AsyncData to EdgeX CommandValue
+			cv, err := sdkModels.NewCommandValue(data.ResourceName, sdkModels.Float64, data.Value)
+			if err != nil {
+				cd.lc.Errorf("Failed to create CommandValue: %v", err)
+				continue
+			}
+
+			// Wrap into EdgeX AsyncValues structure
+			asyncVal := &sdkModels.AsyncValues{
+				DeviceName:    data.DeviceName,
+				CommandValues: []*sdkModels.CommandValue{cv},
+			}
+
+			// Push to EdgeX core
+			cd.asyncCh <- asyncVal
+		}
+	}
+}
+
+func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
+	drv, err := cd.route(device.Protocols)
 	if err != nil {
 		return err
 	}
@@ -237,7 +297,7 @@ func (c *CompositeDriver) ValidateDevice(device models.Device) error {
 
 // ---------- 私有路由方法 ----------
 
-func (c *CompositeDriver) route(protocols map[string]models.ProtocolProperties) (SubDriver, error) {
+func (cd *CompositeDriver) route(protocols map[string]models.ProtocolProperties) (SubDriver, error) {
 	if _, ok := protocols[ProtocolKeyModbus]; ok {
 		return nil, nil
 	}
@@ -249,8 +309,8 @@ func (c *CompositeDriver) route(protocols map[string]models.ProtocolProperties) 
 
 // Initialize all observability metrics for the driver
 // 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
-func (c *CompositeDriver) initMetrics() error {
-	c.readCommandsExecuted = gometrics.NewCounter()
+func (cd *CompositeDriver) initMetrics() error {
+	cd.readCommandsExecuted = gometrics.NewCounter()
 	ds := interfaces.Service()
 	metricsManager := ds.GetMetricsManager()
 	// Check if metrics manager is available
@@ -259,30 +319,30 @@ func (c *CompositeDriver) initMetrics() error {
 	}
 
 	// Register the counter metric for read commands
-	err := metricsManager.Register(readCommandsExecutedName, c.readCommandsExecuted, nil)
+	err := metricsManager.Register(readCommandsExecutedName, cd.readCommandsExecuted, nil)
 	if err != nil {
 		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
 	}
-	c.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
+	cd.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
 	return nil
 }
 
 // ProcessCustomConfigChanges ...hot-reload configuration
 // 配置热更新，不重启加载配置。
-func (c *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface{}) {
+func (cd *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface{}) {
 	updated, ok := rawWritableConfig.(*config.SimpleWritable)
 	if !ok {
-		c.lc.Error("unable to process custom config updates: Can not cast raw config to type 'SimpleWritable'")
+		cd.lc.Error("unable to process custom config updates: Can not cast raw config to type 'SimpleWritable'")
 		return
 	}
 
-	c.lc.Info("Received configuration updates for 'SimpleCustom.Writable' section")
+	cd.lc.Info("Received configuration updates for 'SimpleCustom.Writable' section")
 
-	previous := c.serviceConfig.SimpleCustom.Writable
-	c.serviceConfig.SimpleCustom.Writable = *updated
+	previous := cd.serviceConfig.SimpleCustom.Writable
+	cd.serviceConfig.SimpleCustom.Writable = *updated
 
 	if reflect.DeepEqual(previous, *updated) {
-		c.lc.Info("No changes detected")
+		cd.lc.Info("No changes detected")
 		return
 	}
 
@@ -293,6 +353,6 @@ func (c *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interface
 	// This may not be true for all settings, such as external host connection info, which
 	// may require re-establishing the connection to the external host for example.
 	if previous.DiscoverSleepDurationSecs != updated.DiscoverSleepDurationSecs {
-		c.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
+		cd.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
 	}
 }

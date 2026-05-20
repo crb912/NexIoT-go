@@ -1,7 +1,8 @@
 // Package adapter provides unit tests for the Modbus protocol adapter.
-package adapter
+package poller
 
 import (
+	"better-iot-edge/pkg/adapter"
 	"errors"
 	"fmt"
 	"strings"
@@ -299,8 +300,8 @@ func TestParseAndCalculateSpan_OffsetMapping(t *testing.T) {
 
 func TestGetProtocolType(t *testing.T) {
 	mc := &ModbusClient{}
-	if got := mc.GetProtocolType(); got != ProtocolModbusTCP {
-		t.Errorf("GetProtocolType() = %q, want %q", got, ProtocolModbusTCP)
+	if got := mc.GetProtocolType(); got != adapter.ProtocolModbusTCP {
+		t.Errorf("GetProtocolType() = %q, want %q", got, adapter.ProtocolModbusTCP)
 	}
 }
 
@@ -686,7 +687,7 @@ func TestReadBatch_SparseAddresses_CorrectOffsetMapping(t *testing.T) {
 		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
 
-	byAddr := make(map[string]Resource)
+	byAddr := make(map[string]adapter.Resource)
 	for _, p := range points {
 		byAddr[p.Address] = p
 	}
@@ -778,7 +779,7 @@ func TestReadBatch_MixedValidAndInvalid(t *testing.T) {
 		t.Fatalf("want 3 points, got %d", len(points))
 	}
 
-	byAddr := make(map[string]Resource)
+	byAddr := make(map[string]adapter.Resource)
 	for _, p := range points {
 		byAddr[p.Address] = p
 	}

@@ -5,6 +5,7 @@ package connpool
 
 import (
 	"better-iot-edge/pkg/adapter"
+	"better-iot-edge/pkg/adapter/poller"
 	"better-iot-edge/pkg/conv"
 	"errors"
 	"fmt"
@@ -13,12 +14,12 @@ import (
 )
 
 // Pool manages protocol connpool connections.
-// It caches ProtocolAdapter instances keyed by "<protocol>:<endpoint>".
+// It caches ReaderAdapter instances keyed by "<protocol>:<endpoint>".
 type Pool struct {
 	mu      sync.RWMutex
 	timeout time.Duration
 	maxSize int
-	clients map[string]ProtocolAdapter
+	clients map[string]ReaderAdapter
 }
 
 // Option is a functional option for configuring the Pool.
@@ -41,7 +42,7 @@ func WithMaxCounts(n int) Option {
 // New creates a new Pool with default settings and applies options.
 func New(opts ...Option) *Pool {
 	p := &Pool{
-		clients: make(map[string]ProtocolAdapter),
+		clients: make(map[string]ReaderAdapter),
 		timeout: 5 * time.Second, // Default timeout
 		maxSize: 100,             // Default max connections
 	}
@@ -53,7 +54,7 @@ func New(opts ...Option) *Pool {
 }
 
 // GetOrCreate returns an existing connection or creates a new one.
-func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string]interface{}) (ProtocolAdapter, error) {
+func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
 	protocol, err := validateProtocol(protocolName)
 	if err != nil {
 		return nil, err
@@ -112,14 +113,14 @@ func (p *Pool) CloseAll() {
 
 // register stores a connpool under the given key.
 // Caller must hold p.mu write lock.
-func (p *Pool) register(key string, client ProtocolAdapter) {
+func (p *Pool) register(key string, client ReaderAdapter) {
 	p.clients[key] = client
 }
 
-// createClient is a factory that returns the correct ProtocolAdapter
+// createClient is a factory that returns the correct ReaderAdapter
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Pool) createClient(endpoint, protocolName string, args map[string]interface{}) (ProtocolAdapter, error) {
+func (p *Pool) createClient(endpoint, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
 	switch protocolName {
 	case "modbus-tcp":
 		return newModbusClient(endpoint, adapter.ProtocolModbusTCP, p.timeout, args)
@@ -154,8 +155,8 @@ func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
 //	"stop_bits"  uint  – stop bits        (RTU only, default 1)
 //	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
 //	"timeout"    time.Duration – overrides the pool-level timeout
-func newModbusClient(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]interface{}) (*adapter.ModbusClient, error) {
-	c := &adapter.ModbusClient{
+func newModbusClient(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]interface{}) (*poller.ModbusClient, error) {
+	c := &poller.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,
 		Timeout:      defaultTimeout,

@@ -1,8 +1,9 @@
 // Package adapter
 // pkg/protocol/modbus.go
-package adapter
+package poller
 
 import (
+	"better-iot-edge/pkg/adapter"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,7 +26,7 @@ type ModbusClient struct {
 	// EndPoint is the target address (e.g., "tcp://192.168.1.100:502" or "rtu:///dev/ttyUSB0")
 	EndPoint string
 	// Timeout is the max time to wait for a reply
-	ProtocolType ProtocolType
+	ProtocolType adapter.ProtocolType
 	Timeout      time.Duration
 	// BaudRate is for RTU only (e.g., 9600, 115200)
 	BaudRate uint
@@ -111,7 +112,7 @@ func (m *ModbusClient) Disconnect() error {
 	return nil
 }
 
-func (m *ModbusClient) GetProtocolType() ProtocolType {
+func (m *ModbusClient) GetProtocolType() adapter.ProtocolType {
 	return m.ProtocolType
 }
 
@@ -155,8 +156,8 @@ func (m *ModbusClient) IsConnect() bool {
 }
 
 // ReadSingle reads a single holding register.
-func (m *ModbusClient) ReadSingle(pointID string) (Resource, error) {
-	p := Resource{
+func (m *ModbusClient) ReadSingle(pointID string) (adapter.Resource, error) {
+	p := adapter.Resource{
 		Address:   pointID,
 		Timestamp: time.Now(),
 	}
@@ -190,8 +191,8 @@ func (m *ModbusClient) ReadSingle(pointID string) (Resource, error) {
 
 // ReadBatch reads multiple holding registers efficiently by calculating the span.
 // It accepts semantic points but optimizes physical reads.
-func (m *ModbusClient) ReadBatch(pointIDs []string) ([]Resource, error) {
-	var points []Resource
+func (m *ModbusClient) ReadBatch(pointIDs []string) ([]adapter.Resource, error) {
+	var points []adapter.Resource
 	if len(pointIDs) == 0 {
 		return points, nil
 	}
@@ -218,7 +219,7 @@ func (m *ModbusClient) ReadBatch(pointIDs []string) ([]Resource, error) {
 	timestamp := time.Now()
 
 	for _, id := range pointIDs {
-		p := Resource{
+		p := adapter.Resource{
 			Address:   id,
 			Timestamp: timestamp,
 		}
