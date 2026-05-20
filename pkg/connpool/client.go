@@ -1,5 +1,4 @@
-// Package client Package protocol define the IoT protocol layer interfaces and the data structures for the returned adapter.Resources.
-package client
+package connpool
 
 import (
 	"better-iot-edge/pkg/adapter"

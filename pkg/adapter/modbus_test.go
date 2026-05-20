@@ -339,7 +339,7 @@ func TestConnect_SetsConnectedTrue(t *testing.T) {
 		t.Error("connected should be true after successful Connect()")
 	}
 	if !mock.openCalled {
-		t.Error("Open() was never called on the underlying client")
+		t.Error("Open() was never called on the underlying connpool")
 	}
 }
 
@@ -352,7 +352,7 @@ func TestDisconnect_NilClient(t *testing.T) {
 
 	mc := &ModbusClient{connected: false}
 	if err := mc.Disconnect(); err != nil {
-		t.Errorf("Disconnect() with nil client should return nil, got: %v", err)
+		t.Errorf("Disconnect() with nil connpool should return nil, got: %v", err)
 	}
 	if mc.connected {
 		t.Error("connected should be false after Disconnect()")
@@ -388,7 +388,7 @@ func TestDisconnect_SetsConnectedFalse(t *testing.T) {
 		t.Error("connected should be false after Disconnect()")
 	}
 	if !mock.closeCalled {
-		t.Error("Close() was never called on the underlying client")
+		t.Error("Close() was never called on the underlying connpool")
 	}
 }
 
@@ -401,7 +401,7 @@ func TestIsConnect_NilClient(t *testing.T) {
 
 	mc := &ModbusClient{client: nil, connected: false}
 	if mc.IsConnect() {
-		t.Error("IsConnect() should be false when client is nil")
+		t.Error("IsConnect() should be false when connpool is nil")
 	}
 }
 

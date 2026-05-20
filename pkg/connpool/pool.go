@@ -1,7 +1,7 @@
-// Package client manages IoT protocol clients.
+// Package connpool manages IoT protocol clients.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
-package client
+package connpool
 
 import (
 	"better-iot-edge/pkg/adapter"
@@ -12,12 +12,12 @@ import (
 	"time"
 )
 
-// Pool manages protocol client connections.
+// Pool manages protocol connpool connections.
 // It caches ProtocolAdapter instances keyed by "<protocol>:<endpoint>".
 type Pool struct {
 	mu      sync.RWMutex
 	timeout time.Duration
-	count   int
+	maxSize int
 	clients map[string]ProtocolAdapter
 }
 
@@ -34,16 +34,16 @@ func WithTimeout(d time.Duration) Option {
 // WithMaxCounts sets the maximum number of connections.
 func WithMaxCounts(n int) Option {
 	return func(p *Pool) {
-		p.count = n
+		p.maxSize = n
 	}
 }
 
-// NewPool creates a new Pool with default settings and applies options.
-func NewPool(opts ...Option) *Pool {
+// New creates a new Pool with default settings and applies options.
+func New(opts ...Option) *Pool {
 	p := &Pool{
 		clients: make(map[string]ProtocolAdapter),
 		timeout: 5 * time.Second, // Default timeout
-		count:   100,             // Default max connections
+		maxSize: 100,             // Default max connections
 	}
 
 	for _, opt := range opts {
@@ -81,7 +81,7 @@ func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string
 	}
 
 	// Check connection limits before creating a new entry.
-	if len(p.clients) >= p.count {
+	if len(p.clients) >= p.maxSize {
 		return nil, errors.New("max connections limit reached")
 	}
 
@@ -110,7 +110,7 @@ func (p *Pool) CloseAll() {
 	}
 }
 
-// register stores a client under the given key.
+// register stores a connpool under the given key.
 // Caller must hold p.mu write lock.
 func (p *Pool) register(key string, client ProtocolAdapter) {
 	p.clients[key] = client

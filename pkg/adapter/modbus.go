@@ -20,7 +20,7 @@ type modbusClientIface interface {
 	ReadRegisters(address, quantity uint16, registerType modbus.RegType) ([]uint16, error)
 }
 
-// ModbusClient holds network settings for the modbus client.
+// ModbusClient holds network settings for the modbus connpool.
 type ModbusClient struct {
 	// EndPoint is the target address (e.g., "tcp://192.168.1.100:502" or "rtu:///dev/ttyUSB0")
 	EndPoint string
@@ -58,11 +58,11 @@ func (m *ModbusClient) newClient() (*modbus.ModbusClient, error) {
 		clientConfig.Parity = m.Parity
 	}
 
-	// 3. Create the underlying third-party client
+	// 3. Create the underlying third-party connpool
 	underlyingClient, err := modbus.NewClient(clientConfig)
 	if err != nil {
 		m.connected = false
-		return underlyingClient, fmt.Errorf("failed to create modbus client: %w", err)
+		return underlyingClient, fmt.Errorf("failed to create modbus connpool: %w", err)
 	}
 	m.connected = true
 	return underlyingClient, nil
@@ -115,7 +115,7 @@ func (m *ModbusClient) GetProtocolType() ProtocolType {
 	return m.ProtocolType
 }
 
-// IsConnect checks whether the modbus client is still connected to the device.
+// IsConnect checks whether the modbus connpool is still connected to the device.
 // It verifies the connection by attempting a lightweight read of a holding register.
 // Returns true if the connection is alive, false otherwise.
 func (m *ModbusClient) IsConnect() bool {
@@ -206,7 +206,7 @@ func (m *ModbusClient) ReadBatch(pointIDs []string) ([]Resource, error) {
 	}
 
 	// 2. Perform a single batch read.
-	var regs []uint16 // Assuming your client wrapper returns []uint16
+	var regs []uint16 // Assuming your connpool wrapper returns []uint16
 	var readErr error
 
 	if count > 0 {
