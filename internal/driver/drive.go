@@ -3,11 +3,12 @@ package driver
 
 import (
 	"better-iot-edge/pkg/adapter"
-	"better-iot-edge/pkg/connpool"
+	"better-iot-edge/pkg/transport"
 	"context"
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/example/config"
@@ -38,13 +39,9 @@ type CompositeDriver struct {
 	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
-	polls                connpool.Polls
-	receivers            *connpool.Receivers
-
-// --------------------------------------------------------------------------
-//  		| ProtocolDriver -- Lifespan management |
-//          Initialize, Star, Stop
-// --------------------------------------------------------------------------
+	polls                transport.Polls
+	receivers            *transport.Receivers
+}
 
 func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
 	cd.lc = lc
@@ -81,7 +78,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 		return fmt.Errorf("unable to listen for changes for 'SimpleCustom.Writable' custom configuration: %s", err.Error())
 	}
 	// Setup metrics
-	if err := cd.initMetrics(); err != nil {
+	if err := cd.initMetrics(ds); err != nil {
 		cd.lc.Errorf("Failed to initialize metrics: %v", err)
 	}
 	cd.lc.Info("Driver initialized")
@@ -89,25 +86,45 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 
 }
 
-func (cd *CompositeDriver) Start() error {
-	cd.lc.Info("Driver Started")
+// Initialize all observability metrics for the driver
+// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
+func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
+	cd.readCommandsExecuted = gometrics.NewCounter()
 
-	connpool.NewPolls(
-		connpool.WithMaxCounts(30),
-		connpool.WithTimeout(5*time.Second))
-	cd.lc.Info("IoT Polls Started")
+	var err error
+	metricsManger := sdk.GetMetricsManager()
+	if metricsManger != nil {
+		// Register the counter metric for read commands
+		err = metricsManger.Register(readCommandsExecutedName, cd.readCommandsExecuted, nil)
+	} else {
+		err = errors.New("metrics manager not available")
+	}
+
+	if err != nil {
+		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
+	}
+	cd.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
+	return nil
+}
+
+func (cd *CompositeDriver) Start() error {
+	cd.lc.Info("Driver Start called")
+
+	transport.NewPolls(
+		transport.WithMaxCounts(30),
+		transport.WithTimeout(5*time.Second))
+	cd.lc.Info("Polls Started")
 
 	//  Start the internal consumer goroutine
-	go cd.processAsyncData()
-	// 2. Initialize passive receivers (e.g., HTTP Receiver)
-	cd.receivers = connpool.NewReceivers(":8080")
+	go cd.processReceiveData()
+	cd.receivers = transport.NewReceivers(":8080")
+
 	// Start all receivers, passing the internal channel to them
-	for _, rx := range cd.receivers {
-		if err := rx.Start(cd.ctx, cd.dataCh); err != nil {
-			cd.lc.Errorf("Failed to start receiver: %v", err)
-		}
+	if err := cd.receivers.StartAll(cd.ctx, cd.dataCh); err != nil {
+		cd.lc.Errorf("Failed to start the receiver: %v", err)
 	}
-	cd.lc.Info("IoT Receivers Started")
+
+	cd.lc.Info("Receivers Started")
 
 	return nil
 }
@@ -118,42 +135,40 @@ func (cd *CompositeDriver) Start() error {
 // readings (if supported).
 func (cd *CompositeDriver) Stop(force bool) error {
 	if cd.lc != nil {
-		cd.lc.Debugf("Driver.Stop called: force=%v", force)
+		cd.lc.Debugf("Driver Stop called: force=%v", force)
 	}
 	// Notify all background goroutines to exit
 	cd.cancel()
 	// Stop receivers one by one
-	for _, rx := range cd.receivers {
-		err := rx.Stop()
-		if err != nil {
-			cd.lc.Errorf("Driver.Stop err: %v", err)
-		}
+
+	err := cd.receivers.StopAll()
+	if err != nil {
+		cd.lc.Errorf("Driver.Stop err: %v", err)
 	}
+
 	return nil
 }
 
 // --------------------------------------------------------------------------
-//  		| ProtocolDriver -- Handle Commands |
-//          HandleReadCommands, HandleWriteCommands
+//  Handle Commands:  HandleReadCommands, HandleWriteCommands
 // --------------------------------------------------------------------------
 
 // HandleReadCommands triggers a protocol Read operation for the specified device.
-// DeviceResourceName: 待读取的传感器/寄存器名称
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	cd.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
 	if len(reqs) == 1 {
 		res = make([]*sdkModels.CommandValue, 1)
-		if reqs[0].DeviceResourceName == "SwitchButton" {
-			cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeBool, false)
-			res[0] = cv
-		} else if reqs[0].DeviceResourceName == "Xrotation" {
-			cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeInt32, 111)
-			res[0] = cv
+		if reqs[0].DeviceResourceName != "" {
+			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v", deviceName, reqs[0].DeviceResourceName)
+			//cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeBool, false)
+			//res[0] = cv
 		}
+
 	} else if len(reqs) == 2 {
 		res = make([]*sdkModels.CommandValue, 2)
 		for i, r := range reqs {
+			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v", deviceName, r.DeviceResourceName)
 			var cv *sdkModels.CommandValue
 			switch r.DeviceResourceName {
 			case "Xrotation":
@@ -182,51 +197,32 @@ func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[
 
 	for index, r := range reqs {
 		cd.lc.Debugf("Driver HandleWriteCommands: protocols: %v, resource: %v, parameters: %v, attributes: %v", protocols, reqs[index].DeviceResourceName, params[index], reqs[index].Attributes)
-		cd.lc.Infof("Please write data value (%s) to resource (%s) ", params[index].Value, r.DeviceResourceName)
-
+		cd.lc.Infof("Please write data value (%s) to resource (%s) device(%s)", params[index].Value, r.DeviceResourceName, deviceName)
 	}
 	return nil
 }
 
-// --------------------------------------------------------------------------
-//             | ProtocolDriver -- Device Event |
-// 				AddDevice, UpdateDevice, Discover
-// --------------------------------------------------------------------------
+//   Device Event: AddDevice, UpdateDevice, Discover
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (cd *CompositeDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	cd.lc.Debugf("a new Device is added: %s", deviceName)
-
-	drv, err := cd.route(protocols)
-	if err != nil {
-		return err
-	}
-	return drv.AddDevice(deviceName, protocols, adminState)
+	return nil
 }
 
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
 func (cd *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	cd.lc.Debugf("Device %s is updated", deviceName)
-
-	drv, err := cd.route(protocols)
-	if err != nil {
-		return err
-	}
-	return drv.UpdateDevice(deviceName, protocols, adminState)
+	return nil
 }
 
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (cd *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	cd.lc.Debugf("Device %s is removed", deviceName)
-
-	drv, err := cd.route(protocols)
-	if err != nil {
-		return err
-	}
-	return drv.RemoveDevice(deviceName, protocols)
+	return nil
 }
 
 // Discover triggers protocol specific device discovery, which is an asynchronous operation.
@@ -260,8 +256,8 @@ func (cd *CompositeDriver) Discover() {
 	cd.deviceCh <- res
 }
 
-// processAsyncData reads from dataCh and pushes to EdgeX
-func (cd *CompositeDriver) processAsyncData() {
+// processReceiveData reads from dataCh and pushes to EdgeX
+func (cd *CompositeDriver) processReceiveData() {
 	for {
 		select {
 		case <-cd.ctx.Done():
@@ -269,7 +265,7 @@ func (cd *CompositeDriver) processAsyncData() {
 			return
 		case data := <-cd.dataCh:
 			// Convert AsyncData to EdgeX CommandValue
-			cv, err := sdkModels.NewCommandValue(data.ResourceName, sdkModels.Float64, data.Value)
+			cv, err := sdkModels.NewCommandValue(data.ResourceName, common.ValueTypeFloat64, data.Value)
 			if err != nil {
 				cd.lc.Errorf("Failed to create CommandValue: %v", err)
 				continue
@@ -285,46 +281,6 @@ func (cd *CompositeDriver) processAsyncData() {
 			cd.asyncCh <- asyncVal
 		}
 	}
-}
-
-func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
-	drv, err := cd.route(device.Protocols)
-	if err != nil {
-		return err
-	}
-	return drv.ValidateDevice(device)
-}
-
-// ---------- 私有路由方法 ----------
-
-func (cd *CompositeDriver) route(protocols map[string]models.ProtocolProperties) (SubDriver, error) {
-	if _, ok := protocols[ProtocolKeyModbus]; ok {
-		return nil, nil
-	}
-	if _, ok := protocols[ProtocolKeyHTTP]; ok {
-		return nil, nil
-	}
-	return nil, fmt.Errorf("no supported protocol found in device protocols: %v", protocols)
-}
-
-// Initialize all observability metrics for the driver
-// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
-func (cd *CompositeDriver) initMetrics() error {
-	cd.readCommandsExecuted = gometrics.NewCounter()
-	ds := interfaces.Service()
-	metricsManager := ds.GetMetricsManager()
-	// Check if metrics manager is available
-	if metricsManager == nil {
-		return errors.New("metrics manager not available")
-	}
-
-	// Register the counter metric for read commands
-	err := metricsManager.Register(readCommandsExecutedName, cd.readCommandsExecuted, nil)
-	if err != nil {
-		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
-	}
-	cd.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
-	return nil
 }
 
 // ProcessCustomConfigChanges ...hot-reload configuration
@@ -355,4 +311,27 @@ func (cd *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interfac
 	if previous.DiscoverSleepDurationSecs != updated.DiscoverSleepDurationSecs {
 		cd.lc.Infof("DiscoverSleepDurationSecs changed to: %d", updated.DiscoverSleepDurationSecs)
 	}
+}
+
+func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
+	protocol, ok := device.Protocols["other"]
+	if !ok {
+		return errors.New("missing 'other' protocols")
+	}
+
+	addr, ok := protocol["Address"]
+	if !ok {
+		return errors.New("missing 'Address' information")
+	} else if addr == "" {
+		return errors.New("address must not empty")
+	}
+
+	port, ok := protocol["Port"]
+	if !ok {
+		return errors.New("missing 'Port' information")
+	} else if _, err := strconv.Atoi(port); err != nil {
+		return errors.New("port must be a number")
+	}
+
+	return nil
 }

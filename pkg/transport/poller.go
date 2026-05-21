@@ -1,12 +1,12 @@
 // Package connpool manages IoT protocol clients.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
-package connpool
+package transport
 
 import (
 	"better-iot-edge/pkg/adapter"
 	"better-iot-edge/pkg/adapter/poller"
-	"better-iot-edge/pkg/conv"
+	"better-iot-edge/pkg/parser"
 	"errors"
 	"fmt"
 	"sync"
@@ -176,22 +176,22 @@ func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time
 		}
 	}
 	if v, ok := args["baud_rate"]; ok {
-		if u, ok := conv.ToUint(v); ok {
+		if u, ok := parser.ToUint(v); ok {
 			c.BaudRate = u
 		}
 	}
 	if v, ok := args["data_bits"]; ok {
-		if u, ok := conv.ToUint(v); ok {
+		if u, ok := parser.ToUint(v); ok {
 			c.DataBits = u
 		}
 	}
 	if v, ok := args["stop_bits"]; ok {
-		if u, ok := conv.ToUint(v); ok {
+		if u, ok := parser.ToUint(v); ok {
 			c.StopBits = u
 		}
 	}
 	if v, ok := args["parity"]; ok {
-		if u, ok := conv.ToUint(v); ok {
+		if u, ok := parser.ToUint(v); ok {
 			c.Parity = u
 		}
 	}

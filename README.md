@@ -1,6 +1,8 @@
-# Edge Gateway
+An IoT Edge Gateway based on EdgeX device-sdk-go v2.
 
-An IoT Edge Gateway based on EdgeX device-sdk-go v2. This service acts as a unified Device Service supporting both Modbus TCP Temperature Sensors and HTTP REST Humidity Sensors within a single instance.
+Under Active Development!
+<!-- Project status badge -->
+![Status](https://img.shields.io/badge/status-Work_in_Progress-orange)
 
 ## Quick Start
 
@@ -12,65 +14,59 @@ git config core.hooksPath .githooks
 make init
 ```
 
-## Project Structure
-
+## System Architecture
+```Plaintext
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 UPSTREAM (EdgeX / Edge-sdk)                                 │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                               │
+                                               ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    1. DRIVER CORE LAYER                                     │
+│                                 (internal/driver/drive.go)                                  │
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│ - Core driver logic to serve upstream Edge-sdk.                                             │
+│ - Implements Init, Start, Stop, Device Commands, and Device Events.                         │
+│ - Injects EdgeX async data channel into lower layers to push data upward.                   │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                               │
+                                               ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                2. TRANSPORT CONNECTION LAYER                                │
+│                           (Manage Active & Passive Connection Pools)                        │
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│    ┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐    │
+│    │           POLLER (Active)            │     │          RECEIVER (Passive)          │    │
+│    │        (pkg/transport/poller)        │     │       (pkg/transport/receiver)       │    │
+│    │                                      │     │                                      │    │
+│    │ Handles active protocols:            │     │ Handles passive protocols:           │    │
+│    │ - Modbus RTU/TCP, OPC UA             │     │ - HTTP Webhook, MQTT Sub, UDP        │    │
+│    │ - Actively pulls data from devices.  │     │ - Starts listener to receive data.   │    │
+│    └──────────────────────────────────────┘     └──────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                               │
+                                               ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 3. PROTOCOL ADAPTER LAYER                                   │
+│                        (Uniform Connection Interface & Payload Parsing)                     │
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│    ┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐    │
+│    │           CONN (Interface)           │     │            PARSER (Logic)            │    │
+│    │              (pkg/conn)              │     │             (pkg/parser)             │    │
+│    │                                      │     │                                      │    │
+│    │ - Manages client connection pool.    │     │ - Independent data parsing logic.    │    │
+│    │ - Defines protocol interface:        │     │ - Parses payload for both active     │    │
+│    │   Connect, Disconnect, Read, Write.  │     │   and passive data streams.          │    │
+│    │ - Shared behavior across adapters.   │     │ - Reused by Adapter and Receiver.    │    │
+│    └──────────────────────────────────────┘     └──────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-edge-gateway/
-├── cmd/
-│   └── main.go               # Entry point, invokes startup.Bootstrap
-├── driver/
-│   ├── composite.go          # Routes requests to sub-drivers based on protocol keys
-│   ├── modbus/
-│   │   └── driver.go         # Modbus ProtocolDriver implementation
-│   └── http/
-│       └── driver.go         # HTTP ProtocolDriver implementation
-├── internal/
-│   └── transform/
-│       ├── transform.go      # Modbus byte ↔ value conversion / scaling logic
-│       └── transform_test.go
-├── res/
-│   ├── profiles/
-│   │   ├── temperature.yaml  # Device Profile for temperature sensors
-│   │   └── humidity.yaml     # Device Profile for humidity sensors
-│   ├── devices/
-│   │   └── device-list.yaml  # Static device pre-provisioning & AutoEvent config
-│   └── configuration.yaml    # Main service configuration
-├── Makefile
-├── Dockerfile
-└── docker-compose.yml        # Complete EdgeX development environment
-```
 
-my:
+**Architecture Design Highlights:**
 
-```text
-res /
-		configuration.yaml
-        devices / modbus 
-				device.json   定义设备可采集的资源（资源名称，寄存器地址,，值的类型， 默认值，最大值，最小值，描述。）
-										
-				app-config.yaml  定义设备服务（采名称，描述，协议，采集周期，超时，地址。 等）    "name": "modbus-device1",
-						参考： https://github.com/edgexfoundry/device-modbus-go/blob/main/cmd/res/devices/modbus.test.devices.yaml
-						"protocol": "modbus",
-							"address": "127.0.0.1",
-							"port": 5020,
-							"slave_id": 1,
-							"timeout_ms": 1000,
-
-				poll_interval_seconds: 5   # 采集(轮询)间隔      失败后重试次数
-		
-internal /
-     drivers
-                    / modbus        / 放协议
-     collector   data_collector  采集的管理， 任务调度
-  
-pkg   
-     models / 放数据模型
-     logger
-     utils 等
-     
-cmd      放采集逻辑
-
-```
+- **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Transport layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
+- **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
+- **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
 
 ## Study
 
