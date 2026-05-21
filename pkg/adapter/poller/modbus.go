@@ -1,4 +1,4 @@
-// Package adapter
+// Package poller
 // pkg/protocol/modbus.go
 package poller
 
