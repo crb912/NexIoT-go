@@ -26,7 +26,7 @@ const (
 	ProtocolKeyHTTP   = "http"
 )
 
-// CompositeDriver 持有所有子驱动，实现 EdgeX ProtocolDriver 接口。
+// CompositeDriver 实现 EdgeX ProtocolDriver 接口。
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
@@ -38,9 +38,8 @@ type CompositeDriver struct {
 	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
-	polls                poll.Polls
-	receivers            []connpool.ReceiverAdapter
-}
+	polls                connpool.Polls
+	receivers            *connpool.Receivers
 
 // --------------------------------------------------------------------------
 //  		| ProtocolDriver -- Lifespan management |
@@ -93,22 +92,23 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 func (cd *CompositeDriver) Start() error {
 	cd.lc.Info("Driver Started")
 
-	connpool.New(
+	connpool.NewPolls(
 		connpool.WithMaxCounts(30),
 		connpool.WithTimeout(5*time.Second))
-	cd.lc.Info("IoT Clients Poll Started")
+	cd.lc.Info("IoT Polls Started")
 
 	//  Start the internal consumer goroutine
 	go cd.processAsyncData()
 	// 2. Initialize passive receivers (e.g., HTTP Receiver)
-	recvs := connpool.NewReceivers(":8080")
-	cd.receivers = recvs
+	cd.receivers = connpool.NewReceivers(":8080")
 	// Start all receivers, passing the internal channel to them
 	for _, rx := range cd.receivers {
 		if err := rx.Start(cd.ctx, cd.dataCh); err != nil {
 			cd.lc.Errorf("Failed to start receiver: %v", err)
 		}
 	}
+	cd.lc.Info("IoT Receivers Started")
+
 	return nil
 }
 

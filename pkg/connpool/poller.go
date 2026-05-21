@@ -13,35 +13,35 @@ import (
 	"time"
 )
 
-// Pool manages protocol connpool connections.
+// Polls manages protocol connpool connections.
 // It caches ReaderAdapter instances keyed by "<protocol>:<endpoint>".
-type Pool struct {
+type Polls struct {
 	mu      sync.RWMutex
 	timeout time.Duration
 	maxSize int
 	clients map[string]ReaderAdapter
 }
 
-// Option is a functional option for configuring the Pool.
-type Option func(*Pool)
+// Option is a functional option for configuring the Polls.
+type Option func(*Polls)
 
 // WithTimeout sets the default timeout for new protocol clients.
 func WithTimeout(d time.Duration) Option {
-	return func(p *Pool) {
+	return func(p *Polls) {
 		p.timeout = d
 	}
 }
 
 // WithMaxCounts sets the maximum number of connections.
 func WithMaxCounts(n int) Option {
-	return func(p *Pool) {
+	return func(p *Polls) {
 		p.maxSize = n
 	}
 }
 
-// New creates a new Pool with default settings and applies options.
-func New(opts ...Option) *Pool {
-	p := &Pool{
+// NewPolls creates a new Polls with default settings and applies options.
+func NewPolls(opts ...Option) *Polls {
+	p := &Polls{
 		clients: make(map[string]ReaderAdapter),
 		timeout: 5 * time.Second, // Default timeout
 		maxSize: 100,             // Default max connections
@@ -53,8 +53,8 @@ func New(opts ...Option) *Pool {
 	return p
 }
 
-// GetOrCreate returns an existing connection or creates a new one.
-func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
+// NewPollerOrGet returns an existing connection or creates a new one.
+func (p *Polls) NewPollerOrGet(endpoint string, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
 	protocol, err := validateProtocol(protocolName)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string
 	}
 
 	// Create and connect the new adapter.
-	newAdapter, err := p.createClient(endpoint, protocolName, args)
+	newAdapter, err := p.newPoll(endpoint, protocolName, args)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for endpoint %s: %w", endpoint, err)
 	}
@@ -100,8 +100,8 @@ func (p *Pool) GetOrCreate(endpoint string, protocolName string, args map[string
 	return newAdapter, nil
 }
 
-// CloseAll disconnects all managed clients and clears the pool.
-func (p *Pool) CloseAll() {
+// DisconnectAll disconnects all managed clients and clears the pool.
+func (p *Polls) DisconnectAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -113,19 +113,19 @@ func (p *Pool) CloseAll() {
 
 // register stores a connpool under the given key.
 // Caller must hold p.mu write lock.
-func (p *Pool) register(key string, client ReaderAdapter) {
+func (p *Polls) register(key string, client ReaderAdapter) {
 	p.clients[key] = client
 }
 
-// createClient is a factory that returns the correct ReaderAdapter
+// newPoll is a factory that returns the correct ReaderAdapter
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Pool) createClient(endpoint, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
+func (p *Polls) newPoll(endpoint, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
 	switch protocolName {
 	case "modbus-tcp":
-		return newModbusClient(endpoint, adapter.ProtocolModbusTCP, p.timeout, args)
+		return newModbusPoll(endpoint, adapter.ProtocolModbusTCP, p.timeout, args)
 	case "modbus-rtu":
-		return newModbusClient(endpoint, adapter.ProtocolModbusRTU, p.timeout, args)
+		return newModbusPoll(endpoint, adapter.ProtocolModbusRTU, p.timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
@@ -147,7 +147,7 @@ func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
 	}
 }
 
-// newModbusClient constructs a ModbusClient from a generic args map.
+// newModbusPoll constructs a ModbusClient from a generic args map.
 // Keys recognized in args:
 //
 //	"baud_rate"  uint  – serial baud rate (RTU only)
@@ -155,7 +155,7 @@ func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
 //	"stop_bits"  uint  – stop bits        (RTU only, default 1)
 //	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
 //	"timeout"    time.Duration – overrides the pool-level timeout
-func newModbusClient(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]interface{}) (*poller.ModbusClient, error) {
+func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]interface{}) (*poller.ModbusClient, error) {
 	c := &poller.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,
