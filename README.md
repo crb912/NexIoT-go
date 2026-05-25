@@ -6,20 +6,30 @@ Under Active Development!
 
 ## Quick Start
 
-```shell
-git clone
+### 1. Prerequisites
 
-git config core.hooksPath .githooks
-# or
-make init
+- Go 1.21+
+- Docker & Docker Compose
+
+### 2. Start EdgeX Core Services
+Launch the minimal required EdgeX infrastructure:
+```bash
+docker-compose up -d consul redis core-metadata core-data core-command
 ```
 
+### 2. Start EdgeX Core Services
+
+```shell
+git clone git@github.com:crb912/hermes-edge.git
+```
+### 3. Configure Device Addresses
+
+Edit res/devices/device-list.yaml and update the IP addresses to match your physical or simulated hardware
 ## System Architecture
 ```Plaintext
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                 UPSTREAM (EdgeX / Edge-sdk)                                 │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
-                                               │
+└──────────────────────────────────────────────┌──────────────────────────────────────────────┘
                                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                    1. DRIVER CORE LAYER                                     │
@@ -28,36 +38,31 @@ make init
 │ - Core driver logic to serve upstream Edge-sdk.                                             │
 │ - Implements Init, Start, Stop, Device Commands, and Device Events.                         │
 │ - Injects EdgeX async data channel into lower layers to push data upward.                   │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
-                                               │
+└──────────────────────────────────────────────┌──────────────────────────────────────────────┘
                                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                2. TRANSPORT CONNECTION LAYER                                │
 │                           (Manage Active & Passive Connection Pools)                        │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
-│    ┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐    │
-│    │           POLLER (Active)            │     │          RECEIVER (Passive)          │    │
-│    │        (pkg/transport/poller)        │     │       (pkg/transport/receiver)       │    │
-│    │                                      │     │                                      │    │
-│    │ Handles active protocols:            │     │ Handles passive protocols:           │    │
-│    │ - Modbus RTU/TCP, OPC UA             │     │ - HTTP Webhook, MQTT Sub, UDP        │    │
-│    │ - Actively pulls data from devices.  │     │ - Starts listener to receive data.   │    │
-│    └──────────────────────────────────────┘     └──────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
-                                               │
+│                       ┌──────────────────────────────────────┐                              │
+│                       │      Transport (Interface)           │                              │  
+│                       │ - Manages client connection pool.    │                              │ 
+│                       │ - Defines protocol interface:        │                              │ 
+│                       │   Connect, Disconnect, Read, Write.  │                              │ 
+│                       │ - Shared behavior across adapters.   │                              │ 
+│                       └──────────────────────────────────────┘                              │ 
+└──────────────────────────────────────────────┌──────────────────────────────────────────────┘ 
                                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                 3. PROTOCOL ADAPTER LAYER                                   │
 │                        (Uniform Connection Interface & Payload Parsing)                     │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │    ┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐    │
-│    │           CONN (Interface)           │     │            PARSER (Logic)            │    │
-│    │              (pkg/conn)              │     │             (pkg/parser)             │    │
+│    │           POLLER (Active)            │     │          RECEIVER (Passive)          │    │
 │    │                                      │     │                                      │    │
-│    │ - Manages client connection pool.    │     │ - Independent data parsing logic.    │    │
-│    │ - Defines protocol interface:        │     │ - Parses payload for both active     │    │
-│    │   Connect, Disconnect, Read, Write.  │     │   and passive data streams.          │    │
-│    │ - Shared behavior across adapters.   │     │ - Reused by Adapter and Receiver.    │    │
+│    │ Handles active protocols:            │     │ Handles passive protocols:           │    │
+│    │ - Modbus RTU/TCP, OPC UA             │     │ - HTTP Webhook, MQTT Sub, UDP        │    │
+│    │ - Actively pulls data from devices.  │     │ - Starts listener to receive data.   │    │
 │    └──────────────────────────────────────┘     └──────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -72,58 +77,18 @@ make init
 
 edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces
 
-1. 对于非标准格式的配置，如何接入
-2. 如何重写部分逻辑。 hand command的用法
+对于非标准格式的配置，如何接入
 
-应用层:
-
-cmd/gateway/main.go - 应用入口点，处理命令行参数和生命周期
-internal/application/app.go - 网关核心应用程序，协调所有组件
-
-配置管理:
-
-internal/config/config.go - 灵活的YAML配置解析和验证
-
-协议驱动:
-
-internal/driver/factory.go - 驱动程序工厂，支持动态驱动创建
-internal/driver/modbus.go - Modbus TCP驱动实现（2个传感器）
-internal/driver/http.go - HTTP REST驱动实现（1个传感器）
-
-设备管理:
-
-internal/device/device.go - 设备生命周期管理和自动数据采集
-## Build
-
-### Install the ZeroMQ Development Library
-
-The edgexfoundry/device-sdk-go depends on the C library libzmq. ZeroMQ is a high-performance asynchronous messaging library.
-
-```bash
-# Install the ZeroMQ development files and pkg-config
-sudo apt-get install libzmq3-dev pkg-config
-# Note: If you happen to be using CentOS, RHEL, or Fedora, the command is:
-sudo dnf install zeromq-devel pkgconf-pkg-config
-```
 
 
 ## Quick Start
 
-### Prerequisites
 
-- Go 1.21+
-- Docker & Docker Compose
 - 
-### 1. Start EdgeX Core Services
 
-Launch the minimal required EdgeX infrastructure:
-```bash
-docker-compose up -d consul redis core-metadata core-data core-command
-```
 
-### 2. Configure Device Addresses
 
-Edit res/devices/device-list.yaml and update the IP addresses to match your physical or simulated hardware:
+### :
 
 ```yaml
 # Modbus TCP Temperature Sensor
