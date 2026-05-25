@@ -156,28 +156,17 @@ func (cd *CompositeDriver) Stop(force bool) error {
 // HandleReadCommands triggers a protocol Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	cd.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
-
-	if len(reqs) == 1 {
-		res = make([]*sdkModels.CommandValue, 1)
-		if reqs[0].DeviceResourceName != "" {
-			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v", deviceName, reqs[0].DeviceResourceName)
-			//cv, _ := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, common.ValueTypeBool, false)
-			//res[0] = cv
+	res = make([]*sdkModels.CommandValue, len(reqs))
+	for i, r := range reqs {
+		cd.lc.Infof("#### Read Commands Executed, Device: %v, Resource: %v", deviceName, r.DeviceResourceName)
+		var cv *sdkModels.CommandValue
+		switch r.DeviceResourceName {
+		case "Xrotation":
+			cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
+		case "Yrotation":
+			cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
 		}
-
-	} else if len(reqs) == 2 {
-		res = make([]*sdkModels.CommandValue, 2)
-		for i, r := range reqs {
-			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v", deviceName, r.DeviceResourceName)
-			var cv *sdkModels.CommandValue
-			switch r.DeviceResourceName {
-			case "Xrotation":
-				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
-			case "Yrotation":
-				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
-			}
-			res[i] = cv
-		}
+		res[i] = cv
 	}
 
 	cd.readCommandsExecuted.Inc(1)
