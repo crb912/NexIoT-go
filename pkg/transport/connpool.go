@@ -1,8 +1,8 @@
 package transport
 
 import (
-	"better-iot-edge/pkg/adapter"
 	"context"
+	"hermes-edge/pkg/adapter"
 )
 
 // Session manages the lifecycle of a connection.

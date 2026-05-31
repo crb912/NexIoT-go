@@ -1,4 +1,4 @@
-module better-iot-edge
+module hermes-edge
 
 go 1.21
 

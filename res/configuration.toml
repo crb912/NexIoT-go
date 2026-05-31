@@ -77,8 +77,8 @@ Protocol = "redis"
 Host = "localhost"
 Port = 6379
 Type = "redis"
-AuthMode = "usernamepassword"  # required for redis messagebus (secure or insecure).
-SecretName = "redisdb"
+AuthMode = ""  # required for redis messagebus (secure or insecure).
+SecretName = ""
 # /<device-profile-name>/<device-name>/<source-name> will be added to this Publish Topic prefix
 PublishTopicPrefix = "edgex/events/device"
 SubscribeTopic = 'edgex/events/app/#'
@@ -145,7 +145,7 @@ UseMessageBus = true
 #   RequiredSecrets = "redisdb"
 
 
-# Example structured custom configuration
+#Example structured custom configuration
 [SimpleCustom]
 OnImageLocation = "./res/on.png"
 OffImageLocation = "./res/off.jpg"

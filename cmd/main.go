@@ -2,13 +2,13 @@
 package main
 
 import (
-	"better-iot-edge/internal/driver"
+	"hermes-edge/internal/driver"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
 
-// ServiceName is the unique identifier of the device service in the EdgeX system.
-var serviceName = "better-iot-edge"
+// serviceName is the unique identifier of the device service in the EdgeX system.
+var serviceName = "hermes-iot-edge"
 
 // Global version for device-sdk-go, can be replaced by Makefile
 var serviceVersion = "dev-d9d13b7"

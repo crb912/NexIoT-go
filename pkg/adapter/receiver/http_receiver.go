@@ -1,10 +1,10 @@
 package receiver
 
 import (
-	"better-iot-edge/pkg/adapter"
 	"context"
 	"encoding/json"
 	"errors"
+	"hermes-edge/pkg/adapter"
 	"net/http"
 )
 

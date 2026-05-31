@@ -2,9 +2,9 @@
 package poller
 
 import (
-	"better-iot-edge/pkg/adapter"
 	"errors"
 	"fmt"
+	"hermes-edge/pkg/adapter"
 	"strings"
 	"testing"
 	"time"

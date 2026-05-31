@@ -3,8 +3,8 @@
 package poller
 
 import (
-	"better-iot-edge/pkg/adapter"
 	"fmt"
+	"hermes-edge/pkg/adapter"
 	"strconv"
 	"strings"
 	"sync"

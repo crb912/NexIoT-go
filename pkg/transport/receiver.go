@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"better-iot-edge/pkg/adapter"
-	"better-iot-edge/pkg/adapter/receiver"
+	"hermes-edge/pkg/adapter"
+	"hermes-edge/pkg/adapter/receiver"
 )
 
 type Receivers struct {

@@ -5,26 +5,43 @@ Under Active Development!
 ![Status](https://img.shields.io/badge/status-Work_in_Progress-orange)
 
 ## Quick Start
-
 ### 1. Prerequisites
+Start EdgeX Core Services
 
-- Go 1.21+
-- Docker & Docker Compose
-
-### 2. Start EdgeX Core Services
-Launch the minimal required EdgeX infrastructure:
 ```bash
-docker-compose up -d consul redis core-metadata core-data core-command
+curl -o docker-compose.yml https://raw.githubusercontent.com/edgexfoundry/edgex-compose/kamakura/docker-compose-no-secty.yml
+
+docker compose pull
+docker compose up -d
 ```
 
-### 2. Start EdgeX Core Services
+Check Edge-X service by`docker stats`: 
+```text
+edgex-core-data  0.03%     10.59MiB / 31.13GiB   0.03%     369kB / 476kB     0B / 0B      17 
+edgex-core-command            0.02%     7.754MiB / 31.13GiB   0.02%     73.4kB / 50.3kB   0B / 0B      17
+edgex-core-metadata           0.03%     8.945MiB / 31.13GiB   0.03%     172kB / 172kB     0B / 0B      21
+edgex-redis   0.20%     2.984MiB / 31.13GiB   0.01%     913kB / 565kB     0B / 193kB   5 
+edgex-device-rest             0.04%     12.29MiB / 31.13GiB   0.04%     111kB / 82.8kB    0B / 0B      18
+edgex-support-scheduler       0.07%     8.516MiB / 31.13GiB   0.03%     88.1kB / 66.3kB   0B / 0B      17 
+edgex-core-consul             0.81%     29.68MiB / 31.13GiB   0.09%     606kB / 574kB     0B / 6.5MB   22
+edgex-ui-go                   0.00%     4.316MiB / 31.13GiB   0.01%     25.6kB / 126B     0B / 0B      5
+```
+
+Check Core Dada API: `curl http://localhost:59880/api/v2/ping`
+Consul (Service register and copnfigureation):  http://localhost:8500
+EdgeX UI: http://localhost:4000
+
+### 2. Start Device Services
 
 ```shell
 git clone git@github.com:crb912/hermes-edge.git
+cd hermes-edge
+go mod tidy
+go build ./cmd/main.go
+# Run with default deivces
+./main
 ```
-### 3. Configure Device Addresses
 
-Edit res/devices/device-list.yaml and update the IP addresses to match your physical or simulated hardware
 ## System Architecture
 ```Plaintext
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -72,6 +89,36 @@ Edit res/devices/device-list.yaml and update the IP addresses to match your phys
 - **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Transport layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
 - **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
 - **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
+
+## How to Configure Device and Profiles
+
+Edit res/devices/*.yaml and update the IP addresses to match your physical or simulated hardware
+
+### 配置文件的格式
+
+每个设备都必须有两个配置文件。
+- 一个定义设备的基本属性，比如：名称，使用的协议，事件采集间隔。
+- 一个定义设备持有的资源，比如温度传感器，压力，湿度等具体的资源属性，以及这些资源的数据类型，物理意义,映射的map。
+
+配置文件的规范:
+
+```text
+/res/devices/
+         |------ modbus.test.devices.yaml
+         |------ opc.test.device.yaml
+res/profiles/
+         |------ modbus.test.devices.yaml
+```
+
+你可以把所有设备放在同一个devices-list类型的yaml，也可以按协议的分类成不用yaml，也可以按工厂或设备的类型分类，甚至你可以每个设备单独用一个yaml
+
+我推荐的命名方式是：  协议名.分类名.devices.yaml， 这样方便后续维护这些设备。
+
+### 如何生成配置文件？
+
+在设备数量庞大的时候（一个大型公司可能超过上千种设备），用 yaml 文件维护设备和资源的yaml非常不方便，excel却是对实施人员更友好的设计模式，因此
+我实现了excel 转 yaml 生成的工具，该工具的代码不会编译进入主项目。您不需要手动调用该工具进行转换，建议在CI/CD 借用流水线调用该工具，将生成的yaml打包进入项目即可。或者部署在启用设备服务之前，先调用转换工具，生成配置文件。 同时是支持python或golang 编译的二进制两种方式。
+
 
 ## Study
 

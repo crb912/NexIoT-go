@@ -4,11 +4,11 @@
 package transport
 
 import (
-	"better-iot-edge/pkg/adapter"
-	"better-iot-edge/pkg/adapter/poller"
-	"better-iot-edge/pkg/parser"
 	"errors"
 	"fmt"
+	"hermes-edge/pkg/adapter"
+	"hermes-edge/pkg/adapter/poller"
+	"hermes-edge/pkg/parser"
 	"sync"
 	"time"
 )

@@ -5,7 +5,7 @@ labels:
   - "HVAC"
   - "Air conditioner"
   # - "no label"
-description: "this profile is testing  read modbus devices value with read"
+description: "Profile for modbus testing"
 
 deviceResources:
   -
@@ -29,7 +29,7 @@ deviceResources:
       { primaryTable: "HOLDING_REGISTERS", startingAddress: 1 }
     properties:
       valueType: "Int16"
-      readWrite: "RW"
+      readWrite: "R"
       scale: 1
       minimum: 0
       maximum: 11
@@ -47,7 +47,7 @@ deviceResources:
 deviceCommands:
   -
     name: "Values"
-    readWrite: "RW"
+    readWrite: "R"
     isHidden: false
     resourceOperations:
       - { deviceResource: "SwitchA", mappings: {"true":"ON","false":"OFF"} }

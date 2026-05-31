@@ -2,11 +2,11 @@
 package driver
 
 import (
-	"better-iot-edge/pkg/adapter"
-	"better-iot-edge/pkg/transport"
 	"context"
 	"errors"
 	"fmt"
+	"hermes-edge/pkg/adapter"
+	"hermes-edge/pkg/transport"
 	"reflect"
 	"strconv"
 	"time"

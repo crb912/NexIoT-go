@@ -1,6 +1,6 @@
 .PHONY: build test clean run unitest tidy lint
 
-SERVICE_NAME 		:= better-iot-edge
+SERVICE_NAME 		:= hermes-edge
 SERVICE_VERSION     := "dev-d9d13b7" # AUTO_GENERATED
 BINARY        		:= ./bin/$(SERVICE_NAME)
 ARCH				:=	$(shell uname -m)
