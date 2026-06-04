@@ -4,84 +4,101 @@ Under Active Development!
 <!-- Project status badge -->
 ![Status](https://img.shields.io/badge/status-Work_in_Progress-orange)
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Prerequisites: Start EdgeX Core Services](#prerequisites-start-edgex-core-services) 
+  - [Start Device Services](#start-device-services)
+- [System Architecture](#system-architecture)
+- [Configuration Guide](#configuration-guide)
+
+
 ## Quick Start
-### 1. Prerequisites
-Start EdgeX Core Services
+
+### Prerequisites: Start EdgeX Core Services
 
 ```bash
+# edgeX device-sdk-go v2
+# download or use default docker-compose.yml by `docker compose pull`
 curl -o docker-compose.yml https://raw.githubusercontent.com/edgexfoundry/edgex-compose/kamakura/docker-compose-no-secty.yml
-
 docker compose pull
 docker compose up -d
 ```
 
-Check Edge-X service by`docker stats`: 
+Check Edge-X service by`docker stats` command: 
+
 ```text
-edgex-core-data  0.03%     10.59MiB / 31.13GiB   0.03%     369kB / 476kB     0B / 0B      17 
-edgex-core-command            0.02%     7.754MiB / 31.13GiB   0.02%     73.4kB / 50.3kB   0B / 0B      17
-edgex-core-metadata           0.03%     8.945MiB / 31.13GiB   0.03%     172kB / 172kB     0B / 0B      21
-edgex-redis   0.20%     2.984MiB / 31.13GiB   0.01%     913kB / 565kB     0B / 193kB   5 
-edgex-device-rest             0.04%     12.29MiB / 31.13GiB   0.04%     111kB / 82.8kB    0B / 0B      18
-edgex-support-scheduler       0.07%     8.516MiB / 31.13GiB   0.03%     88.1kB / 66.3kB   0B / 0B      17 
-edgex-core-consul             0.81%     29.68MiB / 31.13GiB   0.09%     606kB / 574kB     0B / 6.5MB   22
-edgex-ui-go                   0.00%     4.316MiB / 31.13GiB   0.01%     25.6kB / 126B     0B / 0B      5
+edgex-core-data         0.03%     10.59MiB / 31.13GiB   0.03%     369kB / 476kB 
+edgex-core-command      0.02%     7.754MiB / 31.13GiB   0.02%     73.4kB / 50.3kB 
+edgex-core-metadata     0.03%     8.945MiB / 31.13GiB   0.03%     172kB / 172kB   
+edgex-redis             0.20%     2.984MiB / 31.13GiB   0.01%     913kB / 565kB   
+edgex-device-rest       0.04%     12.29MiB / 31.13GiB   0.04%     111kB / 82.8kB  
+edgex-support-scheduler 0.07%     8.516MiB / 31.13GiB   0.03%     88.1kB / 66.3kB  
+edgex-core-consul       0.81%     29.68MiB / 31.13GiB   0.09%     606kB / 574kB
+edgex-ui-go             0.00%     4.316MiB / 31.13GiB   0.01%     25.6kB / 126B
 ```
 
 Check Core Dada API: `curl http://localhost:59880/api/v2/ping`
 Consul (Service register and copnfigureation):  http://localhost:8500
 EdgeX UI: http://localhost:4000
 
-### 2. Start Device Services
+### Start Device Services
 
 ```shell
 git clone git@github.com:crb912/hermes-edge.git
 cd hermes-edge
 go mod tidy
 go build ./cmd/main.go
-# Run with default deivces
+
+# Run with insecure mode
+export EDGEX_SECURITY_SECRET_STORE=false
 ./main
 ```
 
+Check if the hermes-edge device service has loaded the default Modbus test device:
+
+```bash
+curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device
+# (or replace `Modbus-TCP-RTU-test-device` with your actual device name)
+```
+
 ## System Architecture
+
 ```Plaintext
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 UPSTREAM (EdgeX / Edge-sdk)                                 │
-└──────────────────────────────────────────────┌──────────────────────────────────────────────┘
-                                               ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    1. DRIVER CORE LAYER                                     │
-│                                 (internal/driver/drive.go)                                  │
-├─────────────────────────────────────────────────────────────────────────────────────────────┤
-│ - Core driver logic to serve upstream Edge-sdk.                                             │
-│ - Implements Init, Start, Stop, Device Commands, and Device Events.                         │
-│ - Injects EdgeX async data channel into lower layers to push data upward.                   │
-└──────────────────────────────────────────────┌──────────────────────────────────────────────┘
-                                               ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                2. TRANSPORT CONNECTION LAYER                                │
-│                           (Manage Active & Passive Connection Pools)                        │
-├─────────────────────────────────────────────────────────────────────────────────────────────┤
-│                       ┌──────────────────────────────────────┐                              │
-│                       │      Transport (Interface)           │                              │  
-│                       │ - Manages client connection pool.    │                              │ 
-│                       │ - Defines protocol interface:        │                              │ 
-│                       │   Connect, Disconnect, Read, Write.  │                              │ 
-│                       │ - Shared behavior across adapters.   │                              │ 
-│                       └──────────────────────────────────────┘                              │ 
-└──────────────────────────────────────────────┌──────────────────────────────────────────────┘ 
-                                               ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 3. PROTOCOL ADAPTER LAYER                                   │
-│                        (Uniform Connection Interface & Payload Parsing)                     │
-├─────────────────────────────────────────────────────────────────────────────────────────────┤
-│    ┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐    │
-│    │           POLLER (Active)            │     │          RECEIVER (Passive)          │    │
-│    │                                      │     │                                      │    │
-│    │ Handles active protocols:            │     │ Handles passive protocols:           │    │
-│    │ - Modbus RTU/TCP, OPC UA             │     │ - HTTP Webhook, MQTT Sub, UDP        │    │
-│    │ - Actively pulls data from devices.  │     │ - Starts listener to receive data.   │    │
-│    └──────────────────────────────────────┘     └──────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                            DRIVER CORE LAYER                              │
+│        (internal/driver, register interface to UPSTREAM (EdgeX)           │
+├───────────────────────────────────────────────────────────────────────────┤
+│ - Core driver logic to serve upstream Edge-sdk.                           │
+│ - Implements Init, Start, Stop, Device Commands, and Device Events.       │
+│ - Injects EdgeX async data channel into lower layers to push data upward. │
+└─────────────────────────────────────┌─────────────────────────────────────┘
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                               CONNECTION LAYER                            │
+│                      (Manage Active & Passive Connection Pools)           │
+├───────────────────────────────────────────────────────────────────────────┤
+│                    ┌──────────────────────────────────────┐               │
+│                    │      Connection (Interface)          │               │  
+│                    │ - Manages client connection pool.    │               │ 
+│                    │ - Defines protocol interface:        │               │ 
+│                    │   Connect, Disconnect, Read, Write.  │               │ 
+│                    │ - Shared behavior across adapters.   │               │ 
+│                    └──────────────────────────────────────┘               │ 
+└─────────────────────────────────────┌─────────────────────────────────────┘ 
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           PROTOCOL ADAPTER LAYER                          │
+│                        (Uniform Protocol Abstraction Interface)           │
+├───────────────────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────┐     ┌─────────────────────────────────┐   │
+│  │      POLLER (Active)       │     │       RECEIVER (Passive)        │   │
+│  │                            │     │                                 │   │
+│  │ Handles active protocols:  │     │ Handles passive protocols:      │   │
+│  │ - Modbus RTU/TCP, OPC UA   │     │ - HTTP Webhook, MQTT Sub, UDP   │   │
+│  │ - Actively pulls data      │     │ - Listener to receive data.     │   │
+│  └────────────────────────────┘     └─────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Architecture Design Highlights:**
@@ -90,9 +107,33 @@ go build ./cmd/main.go
 - **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
 - **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
 
-## How to Configure Device and Profiles
+## Configuration Guide
 
-Edit res/devices/*.yaml and update the IP addresses to match your physical or simulated hardware
+### How to Configure Device and Profiles
+
+Edit res/devices/*.json and update the IP addresses to match your physical or simulated hardware
+
+**Device Configuration** (`res/devices/`)
+
+[device-sdk-go](https://github.com/edgexfoundry/device-sdk-go) v2 only supports **TOML** or **JSON** format for device configuration files.
+
+> Reference: [device-sdk-go v2.3.0 example devices](https://github.com/edgexfoundry/device-sdk-go/tree/v2.3.0/example/cmd/device-simple/res/devices)
+
+**Profile Configuration** (`res/profiles/`)
+
+v2 only supports **YAML** or **JSON** format for device profile configuration files.
+
+> Reference: [device-sdk-go v2.3.0 example profiles](https://github.com/edgexfoundry/device-sdk-go/tree/v2.3.0/example/cmd/device-simple/res/profiles)
+
+**Recommendation**
+
+It is recommended to use **JSON** for both devices and profiles to keep the configuration format consistent across the project.
+
+## TODO
+
+1. 自动发现
+2. 版本更新与make
+3. v2版本不支持这个字段，需要检查。 modbus.test.devices.yaml
 
 ### 配置文件的格式
 
@@ -162,24 +203,7 @@ curl http://localhost:59880/api/v2/event/device/name/temperature-sensor-01?limit
 curl http://localhost:59882/api/v2/device/name/temperature-sensor-01/command/readTemperature
 ```
 
-## Configuration Guide
 
-### Adding a New Modbus Device
-
-Append the following to `res/devices/device-list.yaml`：
-
-```yaml
-- name: "temperature-sensor-02"
-  profileName: "temperature-sensor"
-  autoEvents:
-    - interval: "5s"
-      onChange: false
-      sourceName: "readTemperature"
-  protocols:
-    modbus:
-      Address: "192.168.1.11:502"
-      SlaveID: "2"
-```
 
 ## Protocol Driver Specifications
 

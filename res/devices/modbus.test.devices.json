@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Modbus-TCP-RTU-test-device",
+    "profileName": "Test-Device-Modbus-Profile",
+    "description": "This device is a product for monitoring and controlling digital inputs and outputs.",
+    "labels": [
+      "Air conditioner",
+      "modbus TCP",
+      "modbus RTU"
+    ],
+    "protocols": {
+      "modbus-tcp": {
+        "enabled": "true",
+        "Address": "0.0.0.0",
+        "Port": "1502",
+        "UnitID": "1",
+        "Timeout": "5",
+        "IdleTimeout": "5"
+      },
+      "modbus-rtu": {
+        "enabled": "false",
+        "Address": "/tmp/slave",
+        "UnitID": "1",
+        "BaudRate": "19200",
+        "DataBits": "8",
+        "StopBits": "1",
+        "Parity": "N",
+        "Timeout": "5",
+        "IdleTimeout": "5"
+      }
+    },
+    "autoEvents": [
+      {
+        "interval": "20s",
+        "onChange": false,
+        "sourceName": "ReadString"
+      }
+    ]
+  }
+]

@@ -6,9 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"hermes-edge/pkg/adapter"
-	"hermes-edge/pkg/transport"
+	"hermes-edge/pkg/connector"
 	"reflect"
-	"strconv"
 	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/example/config"
@@ -39,8 +38,8 @@ type CompositeDriver struct {
 	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
-	polls                transport.Polls
-	receivers            *transport.Receivers
+	polls                connector.Polls
+	receivers            *connector.Receivers
 }
 
 func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
@@ -103,21 +102,21 @@ func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
 	if err != nil {
 		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
 	}
-	cd.lc.Infof("Registered %s metric for collection when enabled", readCommandsExecutedName)
+	cd.lc.Infof("Registered %s metric", readCommandsExecutedName)
 	return nil
 }
 
 func (cd *CompositeDriver) Start() error {
 	cd.lc.Info("Driver Start called")
 
-	transport.NewPolls(
-		transport.WithMaxCounts(30),
-		transport.WithTimeout(5*time.Second))
+	connector.NewPolls(
+		connector.WithMaxCounts(30),
+		connector.WithTimeout(5*time.Second))
 	cd.lc.Info("Polls Started")
 
 	//  Start the internal consumer goroutine
 	go cd.processReceiveData()
-	cd.receivers = transport.NewReceivers(":8080")
+	cd.receivers = connector.NewReceivers(":8080")
 
 	// Start all receivers, passing the internal channel to them
 	if err := cd.receivers.StartAll(cd.ctx, cd.dataCh); err != nil {
@@ -303,23 +302,20 @@ func (cd *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interfac
 }
 
 func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
-	protocol, ok := device.Protocols["other"]
+	// 校验 modbus-tcp 协议
+	tcpProtocol, ok := device.Protocols["modbus-tcp"]
 	if !ok {
-		return errors.New("missing 'other' protocols")
+		return errors.New("missing 'modbus-tcp' protocols")
 	}
 
-	addr, ok := protocol["Address"]
-	if !ok {
-		return errors.New("missing 'Address' information")
-	} else if addr == "" {
-		return errors.New("address must not empty")
+	addr, ok := tcpProtocol["Address"]
+	if !ok || addr == "" {
+		return errors.New("missing or empty 'Address' in modbus-tcp")
 	}
 
-	port, ok := protocol["Port"]
-	if !ok {
-		return errors.New("missing 'Port' information")
-	} else if _, err := strconv.Atoi(port); err != nil {
-		return errors.New("port must be a number")
+	port, ok := tcpProtocol["Port"]
+	if !ok || port == "" {
+		return errors.New("missing 'Port' in modbus-tcp")
 	}
 
 	return nil

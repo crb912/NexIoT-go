@@ -1,4 +1,4 @@
-package transport
+package connector
 
 import (
 	"context"

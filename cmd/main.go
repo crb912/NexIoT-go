@@ -8,7 +8,7 @@ import (
 )
 
 // serviceName is the unique identifier of the device service in the EdgeX system.
-var serviceName = "hermes-iot-edge"
+var serviceName = "hermes-edge"
 
 // Global version for device-sdk-go, can be replaced by Makefile
 var serviceVersion = "dev-d9d13b7"

@@ -1,7 +1,7 @@
 // Package connpool manages IoT protocol clients.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
-package transport
+package connector
 
 import (
 	"errors"
