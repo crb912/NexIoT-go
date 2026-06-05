@@ -18,8 +18,7 @@ Under Active Development!
 ### Prerequisites: Start EdgeX Core Services
 
 ```bash
-# edgeX device-sdk-go v2
-# download or use default docker-compose.yml by `docker compose pull`
+# Download or use built-in docker-compose.yml by `docker compose pull`
 curl -o docker-compose.yml https://raw.githubusercontent.com/edgexfoundry/edgex-compose/kamakura/docker-compose-no-secty.yml
 docker compose pull
 docker compose up -d
@@ -38,8 +37,10 @@ edgex-core-consul       0.81%     29.68MiB / 31.13GiB   0.09%     606kB / 574kB
 edgex-ui-go             0.00%     4.316MiB / 31.13GiB   0.01%     25.6kB / 126B
 ```
 
-Check Core Dada API: `curl http://localhost:59880/api/v2/ping`
-Consul (Service register and copnfigureation):  http://localhost:8500
+The three backend services `edgex-core-data`, `edgex-core-command`, and `edgex-core-metadata` are essential. Other services depend on your configuration.
+
+Check the backend EdgeX service API: `curl http://localhost:59880/api/v2/ping`
+Check Consul (Service register and configuration):  http://localhost:8500
 EdgeX UI: http://localhost:4000
 
 ### Start Device Services
