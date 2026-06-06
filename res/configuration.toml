@@ -1,7 +1,7 @@
 MaxEventSize = 0   # value 0 unlimit the maximum event size that can be sent to message bus or core-data.
 
 [Writable]
-LogLevel = "INFO"
+LogLevel = "DEBUG"
 LogPath = "log/"
 LogMaxAge = 3
 LogMaxBackups = 20

@@ -21,12 +21,6 @@ import (
 
 const readCommandsExecutedName = "ReadCommandsExecuted"
 
-const (
-	ProtocolKeyModbus = "modbus"
-	ProtocolKeyHTTP   = "http"
-)
-
-// CompositeDriver 实现 EdgeX ProtocolDriver 接口。
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
@@ -42,6 +36,7 @@ type CompositeDriver struct {
 	receivers            *connector.Receivers
 }
 
+// Initialize performs protocol-independent initialization for the device service.
 func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModels.AsyncValues, deviceCh chan<- []sdkModels.DiscoveredDevice) error {
 	cd.lc = lc
 	cd.asyncCh = asyncCh
@@ -81,33 +76,16 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 		cd.lc.Errorf("Failed to initialize metrics: %v", err)
 	}
 	cd.lc.Info("Driver initialized")
-	return nil
 
+	return cd.Start()
 }
 
-// Initialize all observability metrics for the driver
-// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
-func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
-	cd.readCommandsExecuted = gometrics.NewCounter()
-
-	var err error
-	metricsManger := sdk.GetMetricsManager()
-	if metricsManger != nil {
-		// Register the counter metric for read commands
-		err = metricsManger.Register(readCommandsExecutedName, cd.readCommandsExecuted, nil)
-	} else {
-		err = errors.New("metrics manager not available")
-	}
-
-	if err != nil {
-		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
-	}
-	cd.lc.Infof("Registered %s metric", readCommandsExecutedName)
-	return nil
-}
-
-func (cd *CompositeDriver) Start() error {
-	cd.lc.Info("Driver Start called")
+// Start initializes polls and receivers, the former actively collects device data,
+// the latter accepts data push from devices.
+// NOTE: Starting from device-sdk-go v3.0, the SDK automatically calls the Start method.
+// For earlier versions like v2.3, users must manually call this method.
+func (cd *CompositeDriver) Start() (err error) {
+	cd.lc.Info("Driver Start")
 
 	connector.NewPolls(
 		connector.WithMaxCounts(30),
@@ -119,57 +97,62 @@ func (cd *CompositeDriver) Start() error {
 	cd.receivers = connector.NewReceivers(":8080")
 
 	// Start all receivers, passing the internal channel to them
-	if err := cd.receivers.StartAll(cd.ctx, cd.dataCh); err != nil {
+	if err = cd.receivers.StartAll(cd.ctx, cd.dataCh); err != nil {
 		cd.lc.Errorf("Failed to start the receiver: %v", err)
+		return err
 	}
 
-	cd.lc.Info("Receivers Started")
+	cd.lc.Infof("Receivers Started, Receivers nums: %d", len(cd.receivers.Servers))
 
 	return nil
 }
 
-// Stop the protocol-specific DS code to shut down gracefully, or
+// Stop the protocol-independent DS code to shut down gracefully, or
 // if the force parameter is 'true', immediately. The driver is responsible
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
 func (cd *CompositeDriver) Stop(force bool) error {
 	if cd.lc != nil {
-		cd.lc.Debugf("Driver Stop called: force=%v", force)
+		cd.lc.Infof("Driver Stop called: force=%v", force)
 	}
-	// Notify all background goroutines to exit
-	cd.cancel()
-	// Stop receivers one by one
 
 	err := cd.receivers.StopAll()
 	if err != nil {
 		cd.lc.Errorf("Driver.Stop err: %v", err)
 	}
 
+	// Notify all background goroutines to exit
+	cd.cancel()
+	// Stop receivers one by one
 	return nil
 }
 
-// --------------------------------------------------------------------------
-//  Handle Commands:  HandleReadCommands, HandleWriteCommands
-// --------------------------------------------------------------------------
-
-// HandleReadCommands triggers a protocol Read operation for the specified device.
+// HandleReadCommands triggers a Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
-	cd.lc.Debugf("SimpleDriver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
-	res = make([]*sdkModels.CommandValue, len(reqs))
-	for i, r := range reqs {
-		cd.lc.Infof("#### Read Commands Executed, Device: %v, Resource: %v", deviceName, r.DeviceResourceName)
-		var cv *sdkModels.CommandValue
-		switch r.DeviceResourceName {
-		case "Xrotation":
-			cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
-		case "Yrotation":
-			cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt32, 111)
+	for protocolName, protocolProperties := range protocols {
+		enabled, exists := protocolProperties["enabled"]
+		if exists && enabled == "false" {
+			cd.lc.Debugf("Skip device: %s, protocol %s enabled: %s", deviceName, protocolName, enabled)
+			continue
 		}
-		res[i] = cv
+		cd.lc.Debugf("Read device: %s, protocol: %s, reqs: %d", deviceName, protocolName, len(reqs))
+
+		res = make([]*sdkModels.CommandValue, len(reqs))
+		for i, r := range reqs {
+			var cv *sdkModels.CommandValue
+			switch r.DeviceResourceName {
+			case "StringA":
+				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeString, "A default value for example")
+			case "SWitchA":
+				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeBool, true)
+			case "OperationMode":
+				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt16, 2)
+			}
+			res[i] = cv
+			cd.lc.Infof("### Read Commands Executed, Device: %v, Resource: %v, attr: %v, value: %v", deviceName, r.DeviceResourceName, r.Attributes, cv)
+		}
+		cd.readCommandsExecuted.Inc(1)
 	}
-
-	cd.readCommandsExecuted.Inc(1)
-
 	return
 }
 
@@ -177,9 +160,6 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 // a ResourceOperation for a specific device resource.
 // Since the commands are actuation commands, params provide parameters for the individual
 // command.
-// HandleWriteCommands 传入一个 CommandRequest 结构体切片，
-// 每个结构体对应一个特定设备资源的资源操作（ResourceOperation）。
-// 由于这些命令属于执行/驱动类命令，params 为单个命令提供参数。
 func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
 	params []*sdkModels.CommandValue) error {
 
@@ -189,8 +169,6 @@ func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[
 	}
 	return nil
 }
-
-//   Device Event: AddDevice, UpdateDevice, Discover
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
@@ -213,10 +191,8 @@ func (cd *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]
 	return nil
 }
 
-// Discover triggers protocol specific device discovery, which is an asynchronous operation.
+// Discover triggers protocol-independent device discovery, which is an asynchronous operation.
 // Devices found as part of this discovery operation are written to the channel devices.
-// Discover 触发协议相关的设备发现，这是一个异步操作。
-// 本次发现过程中找到的设备，会写入到 devices 通道中。
 func (cd *CompositeDriver) Discover() {
 	proto := make(map[string]models.ProtocolProperties)
 	proto["other"] = map[string]string{"Address": "simple02", "Port": "301"}
@@ -318,5 +294,26 @@ func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
 		return errors.New("missing 'Port' in modbus-tcp")
 	}
 
+	return nil
+}
+
+// Init all observability metrics for the driver
+// 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
+func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
+	cd.readCommandsExecuted = gometrics.NewCounter()
+
+	var err error
+	metricsManger := sdk.GetMetricsManager()
+	if metricsManger != nil {
+		// Register the counter metric for read commands
+		err = metricsManger.Register(readCommandsExecutedName, cd.readCommandsExecuted, nil)
+	} else {
+		err = errors.New("metrics manager not available")
+	}
+
+	if err != nil {
+		return fmt.Errorf("unable to register metric %s: %s", readCommandsExecutedName, err.Error())
+	}
+	cd.lc.Infof("Registered %s metric", readCommandsExecutedName)
 	return nil
 }

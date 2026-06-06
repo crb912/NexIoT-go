@@ -16,6 +16,7 @@ type Receivers struct {
 func NewReceivers(httpAddress string) *Receivers {
 	rc := new(Receivers)
 	rc.Servers = make([]ReceiverAdapter, 0)
+
 	// Create a new HTTP receiver instance
 	httpRecv := receiver.NewHttpReceiver(httpAddress)
 	rc.Servers = append(rc.Servers, httpRecv)
@@ -38,6 +39,10 @@ func (rc *Receivers) StartAll(ctx context.Context, outCh chan<- *adapter.AsyncDa
 // StopAll calls Stop on every ReceiverAdapter and returns joined errors.
 // It always attempts to stop all receivers, even if some fail.
 func (rc *Receivers) StopAll() error {
+	if rc == nil {
+		return nil
+	}
+
 	var errs []error
 	for _, s := range rc.Servers {
 		if err := s.Stop(); err != nil {

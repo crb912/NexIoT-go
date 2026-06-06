@@ -53,14 +53,23 @@ go build ./cmd/main.go
 
 # Run with insecure mode
 export EDGEX_SECURITY_SECRET_STORE=false
-./main
+
+# or ./main --overwrite 
+./main -o
 ```
 
-Check if the hermes-edge device service has loaded the default Modbus test device:
+Check the device service has loaded the default Modbus test device:
 
 ```bash
+# View pre-defined devices 
+# you can replace `Modbus-TCP-RTU-test-device` with your actual device
 curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device
-# (or replace `Modbus-TCP-RTU-test-device` with your actual device name)
+
+# View pre-defined profile
+curl http://localhost:59881/api/v2/deviceprofile/name/Test-Device-Modbus-Profile
+
+# View device resrouce
+curl http://localhost:59881/api/v2/device/name/Test-Device-Modbus-Profile/StringA
 ```
 
 ## System Architecture

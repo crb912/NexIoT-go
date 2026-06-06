@@ -33,7 +33,7 @@
       {
         "interval": "20s",
         "onChange": false,
-        "sourceName": "ReadString"
+        "sourceName": "Read-All-Values"
       }
     ]
   }
