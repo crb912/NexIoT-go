@@ -143,6 +143,7 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 		reader, err := cd.polls.GetReader(pc)
 		if err != nil {
 			cd.lc.Errorf("Get Reader err: %v", err)
+			return nil, err
 		}
 
 		data, err := reader.ReadBatch([]string{"5", "77", "64"})
