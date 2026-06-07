@@ -68,22 +68,16 @@ Check the device service has loaded the default Modbus test device.
 ```bash
 # Verify the backend EdgeX service API: 
 curl http://localhost:59880/api/v2/ping
-
 # Verify pre-defined devices, you can replace `*-test-device` with your actual device
 curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device
-
 # View pre-defined profile
 curl http://localhost:59881/api/v2/deviceprofile/name/Test-Device-Modbus-Profile
-
-# View pre-defined device resrouce
+# View pre-defined device resrouce， `isHidden`: false
 curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/StringA
-
 # view log
 docker logs edgex-core-command --tail 20
-
 # Check the latest events
 curl http://localhost:59880/api/v2/event/device/name/Modbus-TCP-RTU-test-device?limit=5
-
 # Trigger an on-demand read command:
 curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/Read-All-Values
 ```

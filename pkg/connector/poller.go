@@ -1,4 +1,4 @@
-// Package connpool manages IoT protocol clients.
+// Package connector manages IoT protocol clients.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
 package connector
@@ -20,6 +20,13 @@ type Polls struct {
 	timeout time.Duration
 	maxSize int
 	clients map[string]ReaderAdapter
+}
+
+type ProtocolConfig interface {
+	GetEndpoint() string
+	GetProtocolName() string
+	GetTimeout() time.Duration
+	GetAll() map[string]string
 }
 
 // Option is a functional option for configuring the Polls.
@@ -53,18 +60,16 @@ func NewPolls(opts ...Option) *Polls {
 	return p
 }
 
-// NewPollerOrGet returns an existing connection or creates a new one.
-func (p *Polls) NewPollerOrGet(endpoint string, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
-	protocol, err := validateProtocol(protocolName)
+// GetReader returns an existing connection or creates a new one.
+func (p *Polls) GetReader(pc ProtocolConfig) (ReaderAdapter, error) {
+	protocol, err := validateProtocol(pc.GetProtocolName())
 	if err != nil {
 		return nil, err
 	}
-
-	key := genUniqueKey(protocol, endpoint)
-
+	endpoint := pc.GetEndpoint()
 	// Fast path: return existing healthy connection without a write lock.
 	p.mu.RLock()
-	protocolAdapter, exists := p.clients[key]
+	protocolAdapter, exists := p.clients[endpoint]
 	p.mu.RUnlock()
 
 	if exists && protocolAdapter.IsConnected() {
@@ -76,7 +81,7 @@ func (p *Polls) NewPollerOrGet(endpoint string, protocolName string, args map[st
 	defer p.mu.Unlock()
 
 	// Double-check after acquiring the write lock.
-	protocolAdapter, exists = p.clients[key]
+	protocolAdapter, exists = p.clients[endpoint]
 	if exists && protocolAdapter.IsConnected() {
 		return protocolAdapter, nil
 	}
@@ -87,7 +92,7 @@ func (p *Polls) NewPollerOrGet(endpoint string, protocolName string, args map[st
 	}
 
 	// Create and connect the new adapter.
-	newAdapter, err := p.newPoll(endpoint, protocolName, args)
+	newAdapter, err := p.newPoll(endpoint, protocol, pc.GetTimeout(), pc.GetAll())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for endpoint %s: %w", endpoint, err)
 	}
@@ -96,7 +101,7 @@ func (p *Polls) NewPollerOrGet(endpoint string, protocolName string, args map[st
 		return nil, fmt.Errorf("failed to connect endpoint %s: %w", endpoint, err)
 	}
 
-	p.register(key, newAdapter)
+	p.register(endpoint, newAdapter)
 	return newAdapter, nil
 }
 
@@ -120,20 +125,16 @@ func (p *Polls) register(key string, client ReaderAdapter) {
 // newPoll is a factory that returns the correct ReaderAdapter
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newPoll(endpoint, protocolName string, args map[string]interface{}) (ReaderAdapter, error) {
+func (p *Polls) newPoll(endpoint string, protocolName adapter.ProtocolType, timeout time.Duration, args map[string]string) (ReaderAdapter, error) {
 	switch protocolName {
-	case "modbus-tcp":
-		return newModbusPoll(endpoint, adapter.ProtocolModbusTCP, p.timeout, args)
-	case "modbus-rtu":
-		return newModbusPoll(endpoint, adapter.ProtocolModbusRTU, p.timeout, args)
+	case adapter.ProtocolModbusTCP:
+		return newModbusPoll(endpoint, adapter.ProtocolModbusTCP, timeout, args)
+	case adapter.ProtocolModbusRTU:
+
+		return newModbusPoll(endpoint, adapter.ProtocolModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
-}
-
-// genUniqueKey builds the cache key from protocol type and endpoint.
-func genUniqueKey(pro adapter.ProtocolType, endpoint string) string {
-	return fmt.Sprintf("%s:%s", pro, endpoint)
 }
 
 func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
@@ -155,7 +156,7 @@ func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
 //	"stop_bits"  uint  – stop bits        (RTU only, default 1)
 //	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
 //	"timeout"    time.Duration – overrides the pool-level timeout
-func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]interface{}) (*poller.ModbusClient, error) {
+func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
 	c := &poller.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,
@@ -170,11 +171,6 @@ func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time
 		return c, nil
 	}
 
-	if v, ok := args["timeout"]; ok {
-		if d, ok := v.(time.Duration); ok {
-			c.Timeout = d
-		}
-	}
 	if v, ok := args["baud_rate"]; ok {
 		if u, ok := parser.ToUint(v); ok {
 			c.BaudRate = u

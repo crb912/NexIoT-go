@@ -12,8 +12,9 @@
       "modbus-tcp": {
         "enabled": "true",
         "Address": "0.0.0.0",
-        "Port": "1502",
+        "Port": "5020",
         "UnitID": "1",
+        "Endpoint": "tcp://0.0.0.0:5020",
         "Timeout": "5",
         "IdleTimeout": "5"
       },
@@ -21,6 +22,7 @@
         "enabled": "false",
         "Address": "/tmp/slave",
         "UnitID": "1",
+        "Endpoint": "rtu:///tmp/slave",
         "BaudRate": "19200",
         "DataBits": "8",
         "StopBits": "1",

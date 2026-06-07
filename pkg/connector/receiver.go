@@ -3,12 +3,17 @@ package connector
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	"hermes-edge/pkg/adapter"
 	"hermes-edge/pkg/adapter/receiver"
 )
 
 type Receivers struct {
+	mu      sync.RWMutex
+	timeout time.Duration
+	maxSize int
 	Servers []ReceiverAdapter
 }
 

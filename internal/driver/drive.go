@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hermes-edge/pkg/adapter"
 	"hermes-edge/pkg/connector"
+	"hermes-edge/pkg/parser"
 	"reflect"
 	"time"
 
@@ -32,7 +33,7 @@ type CompositeDriver struct {
 	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
-	polls                connector.Polls
+	polls                *connector.Polls
 	receivers            *connector.Receivers
 }
 
@@ -87,7 +88,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 func (cd *CompositeDriver) Start() (err error) {
 	cd.lc.Info("Driver Start")
 
-	connector.NewPolls(
+	cd.polls = connector.NewPolls(
 		connector.WithMaxCounts(30),
 		connector.WithTimeout(5*time.Second))
 	cd.lc.Info("Polls Started")
@@ -135,21 +136,39 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			cd.lc.Debugf("Skip device: %s, protocol %s enabled: %s", deviceName, protocolName, enabled)
 			continue
 		}
+
 		cd.lc.Debugf("Read device: %s, protocol: %s, reqs: %d", deviceName, protocolName, len(reqs))
 
-		res = make([]*sdkModels.CommandValue, len(reqs))
+		pc := parser.NewProtocolConfigAdapter(protocolName, &protocolProperties)
+		reader, err := cd.polls.GetReader(pc)
+		if err != nil {
+			cd.lc.Errorf("Get Reader err: %v", err)
+		}
+
+		data, err := reader.ReadBatch([]string{"5", "77", "64"})
+		if err != nil {
+			cd.lc.Errorf("Read err: %v", err)
+		}
+		cd.lc.Debugf("### Read ok: %v", data)
+		res = make([]*sdkModels.CommandValue, len(reqs)) // TODO: object pool
 		for i, r := range reqs {
+
+			var createErr error
 			var cv *sdkModels.CommandValue
 			switch r.DeviceResourceName {
 			case "StringA":
-				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeString, "A default value for example")
+				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeString, "A default value for example")
 			case "SwitchA":
-				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeBool, true)
+				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeBool, true)
 			case "OperationMode":
-				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt16, 2)
+				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt16, int16(2))
+			}
+			if createErr != nil {
+				cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
+				continue
 			}
 			res[i] = cv
-			cd.lc.Infof("### Read Commands Executed, Device: %v, Resource: %v, attr: %v, value: %v", deviceName, r.DeviceResourceName, r.Attributes, cv)
+			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v, attr: %v, value: %v", deviceName, r.DeviceResourceName, r.Attributes, cv)
 		}
 		cd.readCommandsExecuted.Inc(1)
 	}
