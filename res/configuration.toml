@@ -43,7 +43,7 @@ Host = "172.17.0.1"
 #Host = "127.0.0.1"
 Port = 59999 # Device serivce are assigned the 599xx range
 ServerBindAddr = ""  # blank value defaults to Service.Host value
-StartupMsg = "device-sdk-go started"
+StartupMsg = "octopus-edge started"
 # MaxRequestSize limit the request body size in kilobyte of put command
 MaxRequestSize = 0 # value 0 unlimit the request size.
 RequestTimeout = "20s"
@@ -88,7 +88,7 @@ SubscribeTopic = 'edgex/events/app/#'
   [MessageQueue.Optional]
   # Default MQTT Specific options that need to be here to enable environment variable overrides of them
   # Client Identifiers
-  ClientId = "hermes-edge"
+  ClientId = "octopus-edge"
   # Connection information
   Qos = "0" # Quality of Sevice values are 0 (At most once), 1 (At least once) or 2 (Exactly once)
   KeepAlive = "10" # Seconds (must be 2 or greater)

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"hermes-edge/pkg/adapter"
 	"net/http"
+	"octopus-edge/pkg/adapter"
 )
 
 // HttpReceiver implements the Receiver interface

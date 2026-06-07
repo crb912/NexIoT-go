@@ -6,9 +6,9 @@ package connector
 import (
 	"errors"
 	"fmt"
-	"hermes-edge/pkg/adapter"
-	"hermes-edge/pkg/adapter/poller"
-	"hermes-edge/pkg/parser"
+	"octopus-edge/pkg/adapter"
+	"octopus-edge/pkg/adapter/poller"
+	"octopus-edge/pkg/parser"
 	"sync"
 	"time"
 )

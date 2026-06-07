@@ -2,13 +2,13 @@
 package main
 
 import (
-	"hermes-edge/internal/driver"
+	"octopus-edge/internal/driver"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
 
 // serviceName is the unique identifier of the device service in the EdgeX system.
-var serviceName = "hermes-edge"
+var serviceName = "octopus-edge"
 
 // Global version for device-sdk-go, can be replaced by Makefile
 var serviceVersion = "dev-d9d13b7"

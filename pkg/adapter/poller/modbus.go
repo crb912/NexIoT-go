@@ -4,7 +4,7 @@ package poller
 
 import (
 	"fmt"
-	"hermes-edge/pkg/adapter"
+	"octopus-edge/pkg/adapter"
 	"strconv"
 	"strings"
 	"sync"

@@ -4,11 +4,19 @@ Under Active Development!
 <!-- Project status badge -->
 ![Status](https://img.shields.io/badge/status-Work_in_Progress-orange)
 
+```text
+  .--.
+ (oo)
+/(__)\
+\/  \/
+```
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
   - [Prerequisites: Start EdgeX Core Services](#prerequisites-start-edgex-core-services) 
   - [Start Device Services](#start-device-services)
+  - [Verify Data Acquisition](#verify-data-acquisition)
 - [System Architecture](#system-architecture)
 - [Configuration Guide](#configuration-guide)
 
@@ -153,7 +161,7 @@ It is recommended to use **JSON** for both devices and profiles to keep the conf
 
 1. 自动发现
 2. 版本更新与make
-3. v2版本不支持这个字段，需要检查。 modbus.test.devices.yaml
+3. 本地时区
 
 ### 配置文件的格式
 
@@ -175,58 +183,17 @@ res/profiles/
 
 我推荐的命名方式是：  协议名.分类名.devices.yaml， 这样方便后续维护这些设备。
 
-### 如何生成配置文件？
+ 如何生成配置文件？
 
 在设备数量庞大的时候（一个大型公司可能超过上千种设备），用 yaml 文件维护设备和资源的yaml非常不方便，excel却是对实施人员更友好的设计模式，因此
 我实现了excel 转 yaml 生成的工具，该工具的代码不会编译进入主项目。您不需要手动调用该工具进行转换，建议在CI/CD 借用流水线调用该工具，将生成的yaml打包进入项目即可。或者部署在启用设备服务之前，先调用转换工具，生成配置文件。 同时是支持python或golang 编译的二进制两种方式。
 
 
-## Study
-
 edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces
-
 对于非标准格式的配置，如何接入
 
 
-
-#
-
-
-
-## Protocol Driver Specifications
-
-### Modbus Driver Attributes
-
-| Protocol Attribute          | Description                              | Example              |
-|-------------|-----------------------------------|-------------------|
-| `Address`   | Modbus TCP Server Address:Port         | `192.168.1.10:502`|
-| `SlaveID`   | Slave Unit Identifier (1–247)                  | `1`               |
-
-### Modbus Resource Attribute
-
-| Resource Attribute         | Resource Attribute    | Default     |
-|-------------------|-----------------------|-----------|
-| `modbusFunction`  | `holding` / `input`   | `holding` |
-| `modbusAddress`   | Register offset (Decimal)） | `0`        |
-| `modbusDataType`  | `float32/int16/uint16/int32/uint32` | `float32`|
-| `scale`           | Value scaling factor           | `1.0`      |
-
-### HTTP Driver Attributes
-
-| Protocol Attribute      | Description                     | Example                   |
-|---------|-----------------------------|-----------------------------|
-| `BaseURL` | Root URL of the device HTTP service       | `http://192.168.1.20:8080` |
-
-### Http Resource Attribute
-
-| Resource Attribute        | Description                | Example         |
-|-------------|--------------------|-----------------|
-| `httpMethod`  | HTTP Verb          | `GET`           |
-| `httpPath`    | API Request Path               | `/api/humidity` |
-| `jsonPath`    | Dot notation to extract value from JSON | `data.humidity` |
-| `scale`       | Value scaling factor            | `1.0`           |
-
-## Testing
+## 其他
 
 ```bash
 # Run unit tests

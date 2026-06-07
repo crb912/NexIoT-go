@@ -2,7 +2,7 @@ package connector
 
 import (
 	"context"
-	"hermes-edge/pkg/adapter"
+	"octopus-edge/pkg/adapter"
 )
 
 // Session manages the lifecycle of a connection.

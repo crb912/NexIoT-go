@@ -1,4 +1,4 @@
-module hermes-edge
+module octopus-edge
 
 go 1.21
 

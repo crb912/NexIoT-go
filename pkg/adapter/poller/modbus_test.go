@@ -4,7 +4,7 @@ package poller
 import (
 	"errors"
 	"fmt"
-	"hermes-edge/pkg/adapter"
+	"octopus-edge/pkg/adapter"
 	"strings"
 	"testing"
 	"time"

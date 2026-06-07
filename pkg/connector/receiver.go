@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"hermes-edge/pkg/adapter"
-	"hermes-edge/pkg/adapter/receiver"
+	"octopus-edge/pkg/adapter"
+	"octopus-edge/pkg/adapter/receiver"
 )
 
 type Receivers struct {

@@ -5,9 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hermes-edge/pkg/adapter"
-	"hermes-edge/pkg/connector"
-	"hermes-edge/pkg/parser"
+	"octopus-edge/pkg/adapter"
+	"octopus-edge/pkg/connector"
+	"octopus-edge/pkg/parser"
 	"reflect"
 	"time"
 
