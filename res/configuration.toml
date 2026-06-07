@@ -37,7 +37,10 @@ LogSecurity = "false"
 
 [Service]
 HealthCheckInterval = "10s"
-Host = "127.0.0.1"
+# IMPORTANT: When edge-core-command is running inside Docker, do not use "127.0.0.1" or "localhost".
+# You must use the host machine's actual IP address or the Docker gateway IP so the container can access this service.
+Host = "172.17.0.1"
+#Host = "127.0.0.1"
 Port = 59999 # Device serivce are assigned the 599xx range
 ServerBindAddr = ""  # blank value defaults to Service.Host value
 StartupMsg = "device-sdk-go started"

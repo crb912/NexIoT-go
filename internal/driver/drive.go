@@ -143,7 +143,7 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			switch r.DeviceResourceName {
 			case "StringA":
 				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeString, "A default value for example")
-			case "SWitchA":
+			case "SwitchA":
 				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeBool, true)
 			case "OperationMode":
 				cv, _ = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt16, 2)

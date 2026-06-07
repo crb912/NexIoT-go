@@ -37,10 +37,13 @@ edgex-core-consul       0.81%     29.68MiB / 31.13GiB   0.09%     606kB / 574kB
 edgex-ui-go             0.00%     4.316MiB / 31.13GiB   0.01%     25.6kB / 126B
 ```
 
-The three backend services `edgex-core-data`, `edgex-core-command`, and `edgex-core-metadata` are essential. Other services depend on your configuration.
+Port definitions:
 
-Check the backend EdgeX service API: `curl http://localhost:59880/api/v2/ping`
-Check Consul (Service register and configuration):  http://localhost:8500
+- Port 59880 (Core Data，`edgex-core-data`: Collects, stores, and routes the actual sensor readings coming UP from the devices.
+- Port 59881 (Core Metadata, `edgex-core-metadata`): Used only for managing metadata (e.g., creating/updating profiles, adding devices). It does NOT read actual device data.
+- Port 59882 (Core Command, `edgex-core-command`): The core microservice port used to send actual Read and Write commands to the devices.
+
+Consul (Service register and configuration):  http://localhost:8500
 EdgeX UI: http://localhost:4000
 
 ### Start Device Services
@@ -55,21 +58,34 @@ go build ./cmd/main.go
 export EDGEX_SECURITY_SECRET_STORE=false
 
 # or ./main --overwrite 
-./main -o
+./main
 ```
 
-Check the device service has loaded the default Modbus test device:
+### Verify Data Acquisition
+
+Check the device service has loaded the default Modbus test device.
 
 ```bash
-# View pre-defined devices 
-# you can replace `Modbus-TCP-RTU-test-device` with your actual device
+# Verify the backend EdgeX service API: 
+curl http://localhost:59880/api/v2/ping
+
+# Verify pre-defined devices, you can replace `*-test-device` with your actual device
 curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device
 
 # View pre-defined profile
 curl http://localhost:59881/api/v2/deviceprofile/name/Test-Device-Modbus-Profile
 
-# View device resrouce
-curl http://localhost:59881/api/v2/device/name/Test-Device-Modbus-Profile/StringA
+# View pre-defined device resrouce
+curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/StringA
+
+# view log
+docker logs edgex-core-command --tail 20
+
+# Check the latest events
+curl http://localhost:59880/api/v2/event/device/name/Modbus-TCP-RTU-test-device?limit=5
+
+# Trigger an on-demand read command:
+curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/Read-All-Values
 ```
 
 ## System Architecture
@@ -113,7 +129,7 @@ curl http://localhost:59881/api/v2/device/name/Test-Device-Modbus-Profile/String
 
 **Architecture Design Highlights:**
 
-- **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Transport layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
+- **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Conection layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
 - **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
 - **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
 
@@ -179,39 +195,7 @@ edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/
 
 
 
-## Quick Start
-
-
-- 
-
-
-
-### :
-
-```yaml
-# Modbus TCP Temperature Sensor
-Address: "192.168.1.10:502"
-
-# HTTP Humidity Sensor
-BaseURL: "http://192.168.1.20:8080"
-```
-
-### 3. Run Locally
-
-```bash
-make run
-```
-
-### 4. Verify Data Acquisition
-Check the latest events:
-
-```bash
-# Check the latest events:
-curl http://localhost:59880/api/v2/event/device/name/temperature-sensor-01?limit=5
-
-# Trigger an on-demand read command:
-curl http://localhost:59882/api/v2/device/name/temperature-sensor-01/command/readTemperature
-```
+#
 
 
 
