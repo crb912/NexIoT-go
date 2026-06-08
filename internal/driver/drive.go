@@ -29,8 +29,6 @@ type CompositeDriver struct {
 	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	counter              interface{}
-	stringArray          []string
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
 	polls                *connector.Polls
@@ -52,11 +50,6 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	cd.lc.Infof("Starting %s: Version %s", ds.Name(), ds.Version())
 
 	cd.serviceConfig = &config.ServiceConfig{}
-	cd.counter = map[string]interface{}{
-		"f1": "ABC",
-		"f2": 123,
-	}
-	cd.stringArray = []string{"foo", "bar"}
 
 	if err := ds.LoadCustomConfig(cd.serviceConfig, "SimpleCustom"); err != nil {
 		return fmt.Errorf("unable to load 'SimpleCustom' custom configuration: %s", err.Error())
@@ -119,7 +112,7 @@ func (cd *CompositeDriver) Stop(force bool) error {
 
 	err := cd.receivers.StopAll()
 	if err != nil {
-		cd.lc.Errorf("Driver.Stop err: %v", err)
+		cd.lc.Errorf("Driver Stop err: %v", err)
 	}
 
 	// Notify all background goroutines to exit
@@ -131,47 +124,67 @@ func (cd *CompositeDriver) Stop(force bool) error {
 // HandleReadCommands triggers a Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	for protocolName, protocolProperties := range protocols {
-		enabled, exists := protocolProperties["enabled"]
-		if exists && enabled == "false" {
-			cd.lc.Debugf("Skip device: %s, protocol %s enabled: %s", deviceName, protocolName, enabled)
+		if isDisabled(protocolProperties) {
+			cd.lc.Debugf("Skip device: %s protocol %s (disabled)", deviceName, protocolName)
 			continue
 		}
 
-		cd.lc.Debugf("Read device: %s, protocol: %s, reqs: %d", deviceName, protocolName, len(reqs))
-
-		pc := parser.NewProtocolConfigAdapter(protocolName, &protocolProperties)
+		pc := parser.NewProtocolConfig(protocolName, &protocolProperties)
 		reader, err := cd.polls.GetReader(pc)
 		if err != nil {
-			cd.lc.Errorf("Get Reader err: %v", err)
-			return nil, err
+			cd.lc.Error("No reader for protocol: %s, device: %s, err: %v", protocolName, deviceName, err)
+			continue
 		}
 
-		data, err := reader.ReadBatch([]string{"5", "77", "64"})
-		if err != nil {
-			cd.lc.Errorf("Read err: %v", err)
-		}
-		cd.lc.Debugf("### Read ok: %v", data)
-		res = make([]*sdkModels.CommandValue, len(reqs)) // TODO: object pool
-		for i, r := range reqs {
+		var createErr error
+		var cv *sdkModels.CommandValue
 
-			var createErr error
-			var cv *sdkModels.CommandValue
-			switch r.DeviceResourceName {
-			case "StringA":
-				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeString, "A default value for example")
-			case "SwitchA":
-				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeBool, true)
-			case "OperationMode":
-				cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, common.ValueTypeInt16, int16(2))
-			}
-			if createErr != nil {
-				cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
+		if len(reqs) == 1 {
+			resIDInterface := reqs[0].Attributes["startingAddress"]
+			resID := fmt.Sprintf("%v", resIDInterface)
+			resData, err := reader.ReadSingle(resID)
+			if err != nil {
+				cd.lc.Errorf("ReadSingle failed for res: %s, device: %s, err: %v", reqs[0].DeviceResourceName, deviceName, err)
 				continue
 			}
-			res[i] = cv
-			cd.lc.Infof("Read Commands Executed, Device: %v, Resource: %v, attr: %v, value: %v", deviceName, r.DeviceResourceName, r.Attributes, cv)
+			cv, createErr = sdkModels.NewCommandValue(reqs[0].DeviceResourceName, reqs[0].Type, resData.RawValue)
+			if createErr != nil {
+				cd.lc.Errorf("Failed to create CommandValue for %s, device: %s, err: %v", reqs[0].DeviceResourceName, deviceName, createErr)
+				continue
+			}
+			res[0] = cv
+			cd.readCommandsExecuted.Inc(1)
+			continue
 		}
-		cd.readCommandsExecuted.Inc(1)
+
+		// TODO:这里的res ID 应该是空接口， 是任意类型， readBatch 一般只是字符串类型。因此要让它适配任意的接口。参考edge-sdk实现。
+		resIDs := func() []string {
+			names := make([]string, 0, len(reqs))
+			for _, r := range reqs {
+				resIDInterface := r.Attributes["startingAddress"]
+				resID := fmt.Sprintf("%v", resIDInterface)
+				names = append(names, resID)
+			}
+			return names
+		}()
+
+		data, err := reader.ReadBatch(resIDs)
+		if err != nil {
+			cd.lc.Errorf("ReadBatch failed for res: , device: %s, err: %v", deviceName, err)
+		}
+		cd.lc.Debugf("### Read ok: %v", data)
+
+		// TODO: object pool
+		//res = make([]*sdkModels.CommandValue, len(reqs))
+		//for i, r := range reqs {
+		//	cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, r.Type, "A default value for example")
+		//	if createErr != nil {
+		//		cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
+		//		continue
+		//	}
+		//	res[i] = cv
+		//	cd.readCommandsExecuted.Inc(1)
+		//}
 	}
 	return
 }
@@ -336,4 +349,9 @@ func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
 	}
 	cd.lc.Infof("Registered %s metric", readCommandsExecutedName)
 	return nil
+}
+
+func isDisabled(props models.ProtocolProperties) bool {
+	v, ok := props["enabled"]
+	return ok && v == "false"
 }

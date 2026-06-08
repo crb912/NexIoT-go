@@ -14,7 +14,7 @@
       "description": "On/Off , 0-OFF 1-ON",
       "attributes": {
         "primaryTable": "COILS",
-        "startingAddress": 0
+        "startingAddress": 8
       },
       "properties": {
         "valueType": "Bool",
@@ -31,7 +31,7 @@
       "description": "0-Cool 1-Heat 2-Auto 3-Dry 4-HAUX 5-Fan 6-HH 8-VAM Auto 9-VAM Bypass 10-VAM Heat Exc 11-VAM Normal",
       "attributes": {
         "primaryTable": "HOLDING_REGISTERS",
-        "startingAddress": 1
+        "startingAddress": 16
       },
       "properties": {
         "valueType": "Int16",
@@ -48,8 +48,8 @@
       "description": "no description",
       "attributes": {
         "primaryTable": "INPUT_REGISTERS",
-        "startingAddress": 1,
-        "stringRegisterSize": 1
+        "startingAddress": 32,
+        "stringRegisterSize": 8
       },
       "properties": {
         "valueType": "String",
@@ -63,9 +63,7 @@
       "readWrite": "R",
       "isHidden": false,
       "resourceOperations": [
-        {
-          "deviceResource": "StringA"
-        },
+        {"deviceResource": "StringA"},
         {
           "deviceResource": "SwitchA",
           "mappings": {

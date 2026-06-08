@@ -14,8 +14,8 @@ type ProtocolConfigAdapter struct {
 	protocolName string                     // Separate variable for protocol name
 }
 
-// NewProtocolConfigAdapter is a constructor to initialize the adapter.
-func NewProtocolConfigAdapter(name string, props *models.ProtocolProperties) *ProtocolConfigAdapter {
+// NewProtocolConfig is a constructor to initialize the adapter.
+func NewProtocolConfig(name string, props *models.ProtocolProperties) *ProtocolConfigAdapter {
 	return &ProtocolConfigAdapter{
 		props:        props,
 		protocolName: name,
