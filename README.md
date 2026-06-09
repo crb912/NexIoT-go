@@ -163,6 +163,7 @@ It is recommended to use **JSON** for both devices and profiles to keep the conf
 2. 版本更新与make
 3. 本地时区
 
+
 ### 配置文件的格式
 
 每个设备都必须有两个配置文件。

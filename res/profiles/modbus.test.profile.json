@@ -13,8 +13,9 @@
       "isHidden": false,
       "description": "On/Off , 0-OFF 1-ON",
       "attributes": {
-        "primaryTable": "COILS",
-        "startingAddress": 8
+        "address": 8,
+        "length": 1,
+        "primaryTable": "COILS"
       },
       "properties": {
         "valueType": "Bool",
@@ -30,8 +31,9 @@
       "isHidden": true,
       "description": "0-Cool 1-Heat 2-Auto 3-Dry 4-HAUX 5-Fan 6-HH 8-VAM Auto 9-VAM Bypass 10-VAM Heat Exc 11-VAM Normal",
       "attributes": {
-        "primaryTable": "HOLDING_REGISTERS",
-        "startingAddress": 16
+        "address": 16,
+        "length": 1,
+        "primaryTable": "HOLDING_REGISTERS"
       },
       "properties": {
         "valueType": "Int16",
@@ -48,8 +50,8 @@
       "description": "no description",
       "attributes": {
         "primaryTable": "INPUT_REGISTERS",
-        "startingAddress": 32,
-        "stringRegisterSize": 8
+        "address": 32,
+        "length": 8
       },
       "properties": {
         "valueType": "String",

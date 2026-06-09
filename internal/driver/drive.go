@@ -175,16 +175,16 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 		cd.lc.Debugf("### Read ok: %v", data)
 
 		// TODO: object pool
-		//res = make([]*sdkModels.CommandValue, len(reqs))
-		//for i, r := range reqs {
-		//	cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, r.Type, "A default value for example")
-		//	if createErr != nil {
-		//		cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
-		//		continue
-		//	}
-		//	res[i] = cv
-		//	cd.readCommandsExecuted.Inc(1)
-		//}
+		res = make([]*sdkModels.CommandValue, len(reqs))
+		for i, r := range reqs {
+			cv, createErr = sdkModels.NewCommandValue(r.DeviceResourceName, r.Type, "A default value for example")
+			if createErr != nil {
+				cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
+				continue
+			}
+			res[i] = cv
+			cd.readCommandsExecuted.Inc(1)
+		}
 	}
 	return
 }
