@@ -152,6 +152,15 @@ Edit res/devices/*.json and update the IP addresses to match your physical or si
 v2 only supports **YAML** or **JSON** format for device profile configuration files.
 
 > Reference: [device-sdk-go v2.3.0 example profiles](https://github.com/edgexfoundry/device-sdk-go/tree/v2.3.0/example/cmd/device-simple/res/profiles)
+```bash
+cd scripts
+python update_profiles.py
+
+# Scanning folder: /home/raybing/Desktop/github/hermes-edge/res/profiles
+# Updating: modbus.test.profile.json
+# Status: 207
+# Response: [{"apiVersion":"v2","statusCode":200}]
+```
 
 **Recommendation**
 

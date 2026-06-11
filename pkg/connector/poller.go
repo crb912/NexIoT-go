@@ -6,9 +6,9 @@ package connector
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/adapter"
-	"octopus-edge/pkg/adapter/poller"
 	"octopus-edge/pkg/parser"
+	"octopus-edge/pkg/protocol"
+	"octopus-edge/pkg/protocol/poller"
 	"sync"
 	"time"
 )
@@ -125,26 +125,26 @@ func (p *Polls) register(key string, client ReaderAdapter) {
 // newPoll is a factory that returns the correct ReaderAdapter
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newPoll(endpoint string, protocolName adapter.ProtocolType, timeout time.Duration, args map[string]string) (ReaderAdapter, error) {
+func (p *Polls) newPoll(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReaderAdapter, error) {
 	switch protocolName {
-	case adapter.ProtocolModbusTCP:
-		return newModbusPoll(endpoint, adapter.ProtocolModbusTCP, timeout, args)
-	case adapter.ProtocolModbusRTU:
+	case protocol.ProtocolModbusTCP:
+		return newModbusPoll(endpoint, protocol.ProtocolModbusTCP, timeout, args)
+	case protocol.ProtocolModbusRTU:
 
-		return newModbusPoll(endpoint, adapter.ProtocolModbusRTU, timeout, args)
+		return newModbusPoll(endpoint, protocol.ProtocolModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
 }
 
-func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
+func validateProtocol(protocolName string) (protocol.ProtocolType, error) {
 	switch protocolName {
 	case "modbus-tcp":
-		return adapter.ProtocolModbusTCP, nil
+		return protocol.ProtocolModbusTCP, nil
 	case "modbus-rtu":
-		return adapter.ProtocolModbusRTU, nil
+		return protocol.ProtocolModbusRTU, nil
 	default:
-		return adapter.ProtocolUnknown, errors.New("not support protocol type")
+		return protocol.ProtocolUnknown, errors.New("not support protocol type")
 	}
 }
 
@@ -156,7 +156,7 @@ func validateProtocol(protocolName string) (adapter.ProtocolType, error) {
 //	"stop_bits"  uint  – stop bits        (RTU only, default 1)
 //	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
 //	"timeout"    time.Duration – overrides the pool-level timeout
-func newModbusPoll(endpoint string, pt adapter.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
+func newModbusPoll(endpoint string, pt protocol.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
 	c := &poller.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,

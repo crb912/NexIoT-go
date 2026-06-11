@@ -12,28 +12,26 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 class LoggingDataBlock(ModbusSequentialDataBlock):
     def getValues(self, address, count=1):
         values = super().getValues(address, count)
-        start_reg = address
+        # pymodbus address 是 0-based，Modbus 寄存器号从 1 开始
+        start_reg = address + 1
         end_reg = start_reg + count - 1
 
         if count == 1:
-            logging.info(f" [READ] Master read register {start_reg}, returned: {values}")
+            logging.info(f" [READ] Register {start_reg}, value: {values[0]}")
         else:
-            logging.info(f" [READ] Master read registers {start_reg} ~ {end_reg} ({count} words), returned: {values}")
-
+            logging.info(f" [READ] Registers {start_reg}~{end_reg} ({count} words), values: {values}")
         return values
 
     def setValues(self, address, values):
-        start_reg = address + 1
+        start_reg = address + 1  # 与 getValues 保持一致
         count = len(values)
         end_reg = start_reg + count - 1
 
         if count == 1:
-            logging.info(f" [WRITE] Master modified register {start_reg}, new value: {values}")
+            logging.info(f" [WRITE] Register {start_reg}, new value: {values[0]}")
         else:
-            logging.info(f" [WRITE] Master batch modified registers {start_reg} ~ {end_reg}, new values: {values}")
-
+            logging.info(f" [WRITE] Registers {start_reg}~{end_reg} ({count} words), values: {values}")
         super().setValues(address, values)
-
 # ==========================================
 
 def load_toml_config():

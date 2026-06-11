@@ -45,13 +45,14 @@
       }
     },
     {
-      "name": "StringA",
+      "name": "MacAddress",
       "isHidden": false,
-      "description": "no description",
+      "description": "Mac Address",
       "attributes": {
         "primaryTable": "INPUT_REGISTERS",
         "address": 32,
-        "length": 8
+        "length": 3,
+        "parsefunc": "parseMACAddress"
       },
       "properties": {
         "valueType": "String",
@@ -65,7 +66,7 @@
       "readWrite": "R",
       "isHidden": false,
       "resourceOperations": [
-        {"deviceResource": "StringA"},
+        {"deviceResource": "MacAddress"},
         {
           "deviceResource": "SwitchA",
           "mappings": {

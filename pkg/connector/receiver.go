@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"octopus-edge/pkg/adapter"
-	"octopus-edge/pkg/adapter/receiver"
+	"octopus-edge/pkg/protocol"
+	"octopus-edge/pkg/protocol/receiver"
 )
 
 type Receivers struct {
@@ -31,7 +31,7 @@ func NewReceivers(httpAddress string) *Receivers {
 // StartAll calls Start on every ReceiverAdapter and returns joined errors.
 // It attempts to start all receivers; if any fail, callers should call StopAll
 // to shut down the receivers that started successfully.
-func (rc *Receivers) StartAll(ctx context.Context, outCh chan<- *adapter.AsyncData) error {
+func (rc *Receivers) StartAll(ctx context.Context, outCh chan<- *protocol.AsyncData) error {
 	var errs []error
 	for _, s := range rc.Servers {
 		if err := s.Start(ctx, outCh); err != nil {

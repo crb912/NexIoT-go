@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"octopus-edge/pkg/adapter"
+	"octopus-edge/pkg/protocol"
 )
 
 // HttpReceiver implements the Receiver interface
@@ -19,7 +19,7 @@ func NewHttpReceiver(address string) *HttpReceiver {
 	}
 }
 
-func (h *HttpReceiver) Start(ctx context.Context, outCh chan<- *adapter.AsyncData) error {
+func (h *HttpReceiver) Start(ctx context.Context, outCh chan<- *protocol.AsyncData) error {
 	mux := http.NewServeMux()
 
 	// Listen on /api/v1/push endpoint
@@ -31,7 +31,7 @@ func (h *HttpReceiver) Start(ctx context.Context, outCh chan<- *adapter.AsyncDat
 		}
 
 		// Extract device info from payload
-		data := &adapter.AsyncData{
+		data := &protocol.AsyncData{
 			DeviceName:   payload["device"].(string),
 			ResourceName: payload["resource"].(string),
 			Value:        payload["value"],
