@@ -2,142 +2,107 @@ import asyncio
 import logging
 import tomllib
 from pymodbus.server import StartAsyncTcpServer  
-from pymodbus.datastore import ModbusSequentialDataBlock
-
-# Fix 1: Use the new ModbusDeviceContext instead of the removed ModbusSlaveContext
-from pymodbus.datastore import ModbusDeviceContext, ModbusServerContext
+from pymodbus.datastore import (
+    ModbusSequentialDataBlock,
+    ModbusDeviceContext,
+    ModbusServerContext
+)
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-class LoggingDataBlock(ModbusSequentialDataBlock):
+class DynamicDataBlock(ModbusSequentialDataBlock):
+    def __init__(self, is_bit=False):
+        self.is_bit = is_bit
+        # Init with a small list to pass parent checks
+        super().__init__(0x00, [0])
+
+    def validate(self, address, count=1):
+        # Always return True to skip size checks
+        return True
+
     def getValues(self, address, count=1):
-        values = super().getValues(address, count)
-        # pymodbus address 是 0-based，Modbus 寄存器号从 1 开始
-        start_reg = address + 1
-        end_reg = start_reg + count - 1
+        # pymodbus zero_mode=False makes 'address' 1-based by default
+        logical_addr = address
+        # Subtract 1 to get the actual wire address (0-based)
+        physical_addr = address - 1
+
+        if self.is_bit:
+            # Rule: even physical address = True, odd = False
+            values = [(addr % 2 == 0) for addr in range(physical_addr, physical_addr + count)]
+            data_type = "BIT"
+        else:
+            # Rule: return the physical address value itself
+            values = [addr for addr in range(physical_addr, physical_addr + count)]
+            data_type = "REG"
+
+        end_physical = physical_addr + count - 1
+        end_logical = logical_addr + count - 1
 
         if count == 1:
-            logging.info(f" [READ] Register {start_reg}, value: {values[0]}")
+            logging.info(f" [READ {data_type}] Device Reg (1-based): {logical_addr} ; Wire Addr (0-based): {physical_addr}  | Returns: {values[0]}")
         else:
-            logging.info(f" [READ] Registers {start_reg}~{end_reg} ({count} words), values: {values}")
+            logging.info(f" [READ {data_type}] Device Reg: {logical_addr}~{end_logical} ; Wire Addr: {physical_addr}~{end_physical} ({count} items) | Returns: {values}")
+
         return values
 
     def setValues(self, address, values):
-        start_reg = address + 1  # 与 getValues 保持一致
+        logical_addr = address
+        physical_addr = address - 1
+        data_type = "BIT" if self.is_bit else "REG"
+
         count = len(values)
-        end_reg = start_reg + count - 1
+        end_physical = physical_addr + count - 1
+        end_logical = logical_addr + count - 1
 
         if count == 1:
-            logging.info(f" [WRITE] Register {start_reg}, new value: {values[0]}")
+            logging.info(f" [WRITE {data_type}] Wire Addr (0-based): {physical_addr} -> Device Reg (1-based): {logical_addr} | Writes: {values[0]}")
         else:
-            logging.info(f" [WRITE] Registers {start_reg}~{end_reg} ({count} words), values: {values}")
-        super().setValues(address, values)
+            logging.info(f" [WRITE {data_type}] Wire Addr: {physical_addr}~{end_physical} ({count} items) -> Device Reg: {logical_addr}~{end_logical} | Writes: {values}")
+
 # ==========================================
 
 def load_toml_config():
-    file_path = r"modbus.toml"
-    with open(file_path, "rb") as f:
-        return tomllib.load(f)
-
-def print_non_zero_items(lst):
-    for index, value in enumerate(lst):
-        pass
-
-def reset_register(reg_kv):
-    """Preset specific registers for simulation purposes"""
-    def set_reg(reg_id, value):
-        reg_kv[reg_id] = value
-
-    set_reg(8000, 0)
-    set_reg(8001, 0)
-    set_reg(8002, 0)
-    set_reg(8003, 4)
-    set_reg(8004, 10)
-    set_reg(8005, 40)
-    set_reg(8006, 30)
-    set_reg(8007, 40)
-    set_reg(8008, 1)
-    set_reg(8009, 0)
-    set_reg(8010, 2)
-    set_reg(8011, 6)
-    set_reg(8012, 6)
-    set_reg(8013, 7)
-    set_reg(8014, 5000)
-    set_reg(8015, 5001)
-    set_reg(8016, 0)
-    set_reg(8017, 0)
-    set_reg(8018, 0)
-    set_reg(8019, 0)
-    set_reg(8020, 0)
-
-    # 1. MAC Address (8023~8025) -> F4:0E:11:30:00:00
-    set_reg(8023, 0xF40E)
-    set_reg(8024, 0x1130)
-    set_reg(8025, 0x0000)
-
-    # 2. Network IP (8026~8027) -> 192.168.0.30
-    set_reg(8026, 0xC0A8)
-    set_reg(8027, 0x001E)
-
-    # 3. Gateway (8028~8029) -> 192.168.0.1
-    set_reg(8028, 0xC0A8)
-    set_reg(8029, 0x0001)
-
-    # 4. DNS
-    set_reg(8032, 0xC0A8)
-    set_reg(8033, 0x0001)
-
-    # 5. Subnet Mask (8030~8031) -> 255.255.255.0
-    set_reg(8030, 0xFFFF)
-    set_reg(8031, 0xFF00)
-
-    # 6. Target Port (8034)
-    set_reg(8034, 502)
-
-    # 7. Target IP (8035~8036) -> 192.168.0.100
-    set_reg(8035, 0xC0A8)
-    set_reg(8036, 0x0064)
-
-    set_reg(8299, 0x0000)
-    set_reg(8300, 0x07EA)
-    set_reg(8301, 3)
-    set_reg(8302, 5)
-    set_reg(8303, 8)
-    set_reg(8304, 8)
-    set_reg(8305, 8)
-
-    print_non_zero_items(reg_kv)
+    # 为了防止你本地没有 toml，这里做个简单的容错 mock
+    try:
+        file_path = r"modbus.toml"
+        with open(file_path, "rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        logging.warning("modbus.toml not found, using default configuration.")
+        return {
+            "protocol_interface_settings": {"port": 5020},
+            "slaves": [{"enabled": True, "node_id": 1}]
+        }
 
 async def create_simulator():
-    print("Starting Modbus TCP Slave Simulator...")
+    print("Starting Dynamic Modbus TCP Slave Simulator...")
     config = load_toml_config()
-
-    # Modified line: Init the list where value equals its index (0 to 65535)
-    hr_values = list(range(65536))
-
-    reset_register(hr_values)
 
     devices_dict = {}
     for slave in config.get('slaves', []):
         if slave.get('enabled', False):
             node_id = slave['node_id']
-            # Fix 2: ModbusDeviceContext is the new valid class name
-            store = ModbusDeviceContext(hr=LoggingDataBlock(0x00, list(hr_values)))
-            devices_dict[node_id] = store
-            logging.info(f"Loaded slave node: Node ID {node_id}")
 
-    # Fix 3: Passed the dictionary directly as a positional argument
+            # 同时将自定义的数据块挂载到 4 种类型上
+            store = ModbusDeviceContext(
+                co=DynamicDataBlock(is_bit=True),  # Coils (读写位)
+                di=DynamicDataBlock(is_bit=True),  # Discretes (只读位)
+                hr=DynamicDataBlock(is_bit=False), # Holding Registers (读写字)
+                ir=DynamicDataBlock(is_bit=False)  # Input Registers (只读字)
+            )
+            devices_dict[node_id] = store
+            logging.info(f"Loaded dynamic slave node: Node ID {node_id}")
+
     context = ModbusServerContext(devices_dict, single=False)
 
     port = config['protocol_interface_settings']['port']
     host = "0.0.0.0"
 
     logging.info(f"Listening on {host}:{port}")
-
     await StartAsyncTcpServer(context=context, address=(host, port))
 
 if __name__ == "__main__":
     try:
         asyncio.run(create_simulator())
     except KeyboardInterrupt:
-        print("Simulator closed.")
+        print("\nSimulator closed.")

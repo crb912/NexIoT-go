@@ -5,8 +5,8 @@ go 1.21
 require (
 	github.com/edgexfoundry/device-sdk-go/v2 v2.3.0
 	github.com/edgexfoundry/go-mod-core-contracts/v2 v2.3.0
-	github.com/simonvetter/modbus v1.6.4
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/simonvetter/modbus v1.6.4
 )
 
 require (

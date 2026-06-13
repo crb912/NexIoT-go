@@ -3,9 +3,7 @@
 package poller
 
 import (
-	"encoding/binary"
 	"fmt"
-	"octopus-edge/pkg/model"
 	"octopus-edge/pkg/protocol"
 	"strconv"
 	"strings"
@@ -15,13 +13,14 @@ import (
 	"github.com/simonvetter/modbus"
 )
 
-// modbusClientIface declares only the methods that ModbusClient actually calls.
+// Client declares only the methods that ModbusClient actually calls.
 // The real *modbus.ModbusClient satisfies this interface automatically.
-type modbusClientIface interface {
+type Client interface {
 	Open() error
 	Close() error
 	ReadRegisters(address, quantity uint16, registerType modbus.RegType) ([]uint16, error)
 	ReadCoils(address, quantity uint16) ([]bool, error)
+	ReadDiscreteInputs(address, quantity uint16) ([]bool, error)
 }
 
 // ModbusClient holds network settings for the modbus connpool.
@@ -42,7 +41,23 @@ type ModbusClient struct {
 
 	mu        sync.Mutex // Protects connection state changes
 	connected bool       // Tracks whether the connection is currently established
-	client    modbusClientIface
+	client    Client
+}
+
+// represents a Modbus data table.
+type tableType string
+
+const (
+	tableCoils            tableType = "COILS"
+	tableDiscretes        tableType = "DISCRETES"
+	tableHoldingRegisters tableType = "HOLDING_REGISTERS"
+	tableInputRegisters   tableType = "INPUT_REGISTERS"
+)
+
+type pointCache struct {
+	res  *protocol.Resource
+	addr uint16
+	len  uint16
 }
 
 // newClient creates and configures a new modbus client instance.
@@ -161,6 +176,129 @@ func (m *ModbusClient) IsConnected() bool {
 	return true
 }
 
+// ReadSingle reads a single Modbus resource based on its primaryTable.
+// The result is stored in point.Value.
+func (m *ModbusClient) ReadSingle(res *protocol.Resource) error {
+	addr, err := convProtocolAddr(res.Address)
+	if err != nil {
+		return fmt.Errorf("modbus ReadSingle: %w", err)
+	}
+
+	tt := getTableType(res.Args)
+	data, err := m.read(addr, res.Length, tt)
+	if err != nil {
+		return err
+	}
+	res.Value = alignSingleValue(data, res.Type, res.Length)
+	return nil
+}
+
+// read data from the Modbus server using a specific function code.
+func (m *ModbusClient) read(addressStart uint16, quantity uint16, tt tableType) (any, error) {
+	switch tt {
+	case tableCoils:
+		return m.client.ReadCoils(addressStart, quantity)
+	case tableDiscretes:
+		return m.client.ReadDiscreteInputs(addressStart, quantity)
+	case tableInputRegisters:
+		return m.client.ReadRegisters(addressStart, quantity, modbus.INPUT_REGISTER)
+	default:
+		return m.client.ReadRegisters(addressStart, quantity, modbus.HOLDING_REGISTER)
+	}
+}
+
+// ReadBatch performs a single span-based read for a list of resources.
+// IMPORTANT: This method assumes ALL resources in the slice share the SAME table type.
+func (m *ModbusClient) ReadBatch(points []*protocol.Resource) error {
+	// Calculate span and build cache
+	minAddr, quantity, caches, err := calculateBatchSpan(points)
+	if err != nil {
+		return err
+	}
+
+	tt := getTableType(points[0].Args)
+	// Call the unified read function
+	dataAny, err := m.read(minAddr, quantity, tt)
+	if err != nil {
+		return fmt.Errorf("batch read failed for type %s: %w", tt, err)
+	}
+
+	// Type switch is necessary to unwrap 'any' into a concrete slice type
+	// so the generic assignValues function can accept it.
+	switch data := dataAny.(type) {
+	case []bool:
+		assignResValues(caches, minAddr, data)
+	case []uint16:
+		assignResValues(caches, minAddr, data)
+	default:
+		return fmt.Errorf("unexpected data type returned from read: %T", dataAny)
+	}
+	return nil
+}
+
+// calculateBatchSpan calculates the minimum start address, total span length, and returns the cache list
+func calculateBatchSpan(points []*protocol.Resource) (minAddr uint16, quantity uint16, caches []pointCache, err error) {
+	minAddr = 0xFFFF
+	var maxEnd uint16 = 0
+
+	// Pre-allocate slice capacity to improve performance
+	caches = make([]pointCache, 0, len(points))
+
+	for i, p := range points {
+		addr, err := convProtocolAddr(p.Address)
+		if err != nil {
+			return 0, 0, nil, fmt.Errorf("point[%d] %s address error: %w", i, p.Name, err)
+		}
+
+		length := uint16(p.Length)
+		caches = append(caches, pointCache{res: p, addr: addr, len: length})
+
+		if addr < minAddr {
+			minAddr = addr
+		}
+
+		endAddr := addr + length
+		if endAddr > maxEnd {
+			maxEnd = endAddr
+		}
+	}
+
+	quantity = maxEnd - minAddr
+	return minAddr, quantity, caches, nil
+}
+
+// assignResValues extracts the specific slice of data for each resource based on its offset.
+// Using generics here [T bool | uint16] keeps the code extremely clean since []bool and []uint16 slice identically.
+func assignResValues[T bool | uint16](caches []pointCache, minAddr uint16, data []T) {
+	for _, c := range caches {
+		// Calculate how far this specific resource is from the start of the read block
+		offset := c.addr - minAddr
+
+		// Safety check to prevent panic (index out of range)
+		if int(offset)+int(c.len) <= len(data) {
+			// Extract the subset and assign it to the resource
+			c.res.Value = alignSingleValue(data[offset:offset+c.len], c.res.Type, c.res.Length)
+		}
+	}
+}
+
+// alignSingleValue aligns raw Modbus slices to the target business type
+func alignSingleValue(rawData any, resType string, length uint16) any {
+	// Return the raw slice if length is > 1
+	if length > 1 {
+		return rawData
+	}
+
+	switch v := rawData.(type) {
+	case []uint16:
+		return v[0]
+	case []bool:
+		return v[0]
+	default:
+		return rawData
+	}
+}
+
 // parseAddress converts a string pointID (e.g., "40001" or "1") to a zero-based Modbus protocol address.
 func parseAddress(id string) (uint16, error) {
 	addrInt, err := strconv.ParseUint(id, 10, 16)
@@ -174,21 +312,21 @@ func parseAddress(id string) (uint16, error) {
 	return uint16(addrInt - 1), nil
 }
 
-// convAddress converts a Resource.Address (any type) to a zero-based Modbus protocol address.
+// convProtocolAddr converts a Resource.Address (any type) to a zero-based Modbus protocol address.
 // Numeric values (float64, int) are used as-is (0-indexed protocol address).
 // String values follow the 1-indexed convention (subtract 1).
-func convAddress(addr any) (uint16, error) {
+func convProtocolAddr(addr any) (uint16, error) {
 	switch v := addr.(type) {
 	case float64:
 		if v < 0 || v > 65535 {
 			return 0, fmt.Errorf("address out of range: %v", v)
 		}
-		return uint16(v), nil
+		return uint16(v) - 1, nil
 	case int:
 		if v < 0 || v > 65535 {
 			return 0, fmt.Errorf("address out of range: %v", v)
 		}
-		return uint16(v), nil
+		return uint16(v) - 1, nil
 	case string:
 		return parseAddress(v)
 	default:
@@ -196,21 +334,13 @@ func convAddress(addr any) (uint16, error) {
 	}
 }
 
-// tableType represents a Modbus data table.
-type tableType string
-
-const (
-	tableCoils            tableType = "COILS"
-	tableHoldingRegisters tableType = "HOLDING_REGISTERS"
-	tableInputRegisters   tableType = "INPUT_REGISTERS"
-)
-
 // getTableType extracts the primaryTable from Resource.Args.
 // Defaults to HOLDING_REGISTERS when not specified.
 func getTableType(args map[string]any) tableType {
 	if args == nil {
 		return tableHoldingRegisters
 	}
+
 	raw, ok := args["primaryTable"]
 	if !ok {
 		return tableHoldingRegisters
@@ -219,149 +349,12 @@ func getTableType(args map[string]any) tableType {
 	if !ok {
 		return tableHoldingRegisters
 	}
-	switch tableType(s) {
-	case tableCoils:
-		return tableCoils
-	case tableInputRegisters:
-		return tableInputRegisters
+
+	t := tableType(s)
+	switch t {
+	case tableCoils, tableDiscretes, tableInputRegisters, tableHoldingRegisters:
+		return t
 	default:
 		return tableHoldingRegisters
 	}
-}
-
-// ReadSingle reads a single Modbus resource based on its primaryTable.
-// The result is stored in point.Value.
-func (m *ModbusClient) ReadSingle(point *model.Resource) error {
-	addr, err := convAddress(point.Address)
-	if err != nil {
-		return fmt.Errorf("modbus ReadSingle: %w", err)
-	}
-
-	tt := getTableType(point.Args)
-
-	switch tt {
-	case tableCoils:
-		coils, err := m.client.ReadCoils(addr, uint16(point.Length))
-		if err != nil {
-			return fmt.Errorf("modbus ReadCoils addr=%d len=%d: %w", addr, point.Length, err)
-		}
-		point.Value = coils
-	case tableInputRegisters:
-		regs, err := m.client.ReadRegisters(addr, uint16(point.Length), modbus.INPUT_REGISTER)
-		if err != nil {
-			return fmt.Errorf("modbus ReadRegisters(input) addr=%d len=%d: %w", addr, point.Length, err)
-		}
-		point.Value = regs
-	default: // tableHoldingRegisters
-		regs, err := m.client.ReadRegisters(addr, uint16(point.Length), modbus.HOLDING_REGISTER)
-		if err != nil {
-			return fmt.Errorf("modbus ReadRegisters(holding) addr=%d len=%d: %w", addr, point.Length, err)
-		}
-		point.Value = regs
-	}
-
-	return nil
-}
-
-// ReadBatch reads multiple Modbus resources, grouped by primaryTable for efficiency.
-// Each point's Value is set directly.
-func (m *ModbusClient) ReadBatch(points []*model.Resource) error {
-	if len(points) == 0 {
-		return nil
-	}
-
-	// Group by table type
-	groups := make(map[tableType][]*model.Resource)
-	for _, p := range points {
-		tt := getTableType(p.Args)
-		groups[tt] = append(groups[tt], p)
-	}
-
-	for tt, group := range groups {
-		if err := m.readBatchGroup(group, tt); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// readBatchGroup performs a span-based batch read for a group of points sharing the same table type.
-func (m *ModbusClient) readBatchGroup(points []*model.Resource, tt tableType) error {
-	// 1. Parse addresses and calculate span
-	type idxAddr struct {
-		idx  int
-		addr uint16
-		len  int
-	}
-	var valid []idxAddr
-
-	minAddr := uint16(0xFFFF)
-	var maxAddr uint16
-
-	for i, p := range points {
-		addr, err := convAddress(p.Address)
-		if err != nil {
-			return fmt.Errorf("point[%d] %s: %w", i, p.Name, err)
-		}
-		endAddr := addr + uint16(p.Length) - 1
-		valid = append(valid, idxAddr{idx: i, addr: addr, len: p.Length})
-		if addr < minAddr {
-			minAddr = addr
-		}
-		if endAddr > maxAddr {
-			maxAddr = endAddr
-		}
-	}
-
-	count := uint16(0)
-	if len(valid) > 0 {
-		count = (maxAddr - minAddr) + 1
-	}
-
-	if count > 125 {
-		return fmt.Errorf("address span too large (%d > 125), requires chunking", count)
-	}
-
-	// 2. Perform batch read based on table type
-	switch tt {
-	case tableCoils:
-		coils, err := m.client.ReadCoils(minAddr, count)
-		if err != nil {
-			return fmt.Errorf("batch ReadCoils addr=%d count=%d: %w", minAddr, count, err)
-		}
-		for _, v := range valid {
-			offset := v.addr - minAddr
-			if int(offset)+v.len <= len(coils) {
-				points[v.idx].Value = coils[offset : offset+uint16(v.len)]
-			}
-		}
-	default: // holding / input registers
-		regType := modbus.HOLDING_REGISTER
-		if tt == tableInputRegisters {
-			regType = modbus.INPUT_REGISTER
-		}
-		regs, err := m.client.ReadRegisters(minAddr, count, regType)
-		if err != nil {
-			return fmt.Errorf("batch ReadRegisters addr=%d count=%d: %w", minAddr, count, err)
-		}
-		for _, v := range valid {
-			offset := v.addr - minAddr
-			if int(offset)+v.len <= len(regs) {
-				points[v.idx].Value = regs[offset : offset+uint16(v.len)]
-			}
-		}
-	}
-
-	return nil
-}
-
-// BytesFromRegs packs a slice of uint16 registers into big-endian []byte.
-// Each register produces 2 bytes (MSB first).
-func BytesFromRegs(regs []uint16) []byte {
-	buf := make([]byte, len(regs)*2)
-	for i, r := range regs {
-		binary.BigEndian.PutUint16(buf[i*2:], r)
-	}
-	return buf
 }

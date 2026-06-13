@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"octopus-edge/pkg/model"
 	"octopus-edge/pkg/protocol"
 )
 
@@ -15,32 +14,32 @@ type Session interface {
 
 // Reader defines the standard read interface for all protocol plugins.
 type Reader interface {
-	ReadSingle(ponit *model.Resource) error
-	ReadBatch(ponits []*model.Resource) error
+	ReadSingle(ponit *protocol.Resource) error
+	ReadBatch(ponits []*protocol.Resource) error
 }
 
 // Writer defines the standard write interface for all protocol plugins.
 type Writer interface {
-	WriteSingle(ponit *model.Resource) error
-	WriteBatch(ponits []*model.Resource) error // 连续写 n 个点
+	WriteSingle(ponit *protocol.Resource) error
+	WriteBatch(ponits []*protocol.Resource) error // 连续写 n 个点
 }
 
-// ReaderAdapter embeds the Reader interface with lifecycle management.
-type ReaderAdapter interface {
+// ReadClient embeds the Reader interface with lifecycle management.
+type ReadClient interface {
 	Session
 	Reader
 	GetProtocolType() protocol.ProtocolType
 }
 
-// WriterAdapter embeds the Writer interface with lifecycle management.
-type WriterAdapter interface {
+// WriteClient embeds the Writer interface with lifecycle management.
+type WriteClient interface {
 	Session
 	Writer
 	GetProtocolType() protocol.ProtocolType
 }
 
-// RWAdapter embeds the Reader and Writer interfaces with lifecycle management.
-type RWAdapter interface {
+// RWClient embeds the Reader and Writer interfaces with lifecycle management.
+type RWClient interface {
 	Session
 	Reader
 	Writer

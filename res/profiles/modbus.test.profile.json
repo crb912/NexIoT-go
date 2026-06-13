@@ -52,7 +52,7 @@
         "primaryTable": "INPUT_REGISTERS",
         "address": 32,
         "length": 3,
-        "parsefunc": "parseMACAddress"
+        "decodefunc": "parseMACAddress"
       },
       "properties": {
         "valueType": "String",

@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"octopus-edge/pkg/connector"
-	"octopus-edge/pkg/model"
 	"octopus-edge/pkg/parser"
 	"octopus-edge/pkg/protocol"
-	"octopus-edge/pkg/protocol/poller"
 	"reflect"
 	"time"
 
@@ -123,55 +121,6 @@ func (cd *CompositeDriver) Stop(force bool) error {
 	return nil
 }
 
-// convertToEdgeXValue transforms a raw protocol value into a type that EdgeX CommandValue accepts.
-// - If a parser is configured, []uint16 is packed to []byte and passed to the parser.
-// - Single-element slices are unwrapped to scalars matching the EdgeX type.
-// - Multi-element []uint16 without parser is returned as []byte.
-func convertToEdgeXValue(raw any, edgexType string, parser model.ParseFunc) (any, error) {
-	switch v := raw.(type) {
-	case []uint16:
-		if parser != nil {
-			rawBytes := poller.BytesFromRegs(v)
-			return parser(rawBytes)
-		}
-		if len(v) == 1 {
-			return scalarFromUint16(v[0], edgexType)
-		}
-		return poller.BytesFromRegs(v), nil
-	case []bool:
-		if len(v) == 1 {
-			return v[0], nil
-		}
-		return v, nil
-	default:
-		return v, nil
-	}
-}
-
-// scalarFromUint16 converts a single uint16 register value to the nearest EdgeX primitive type.
-func scalarFromUint16(val uint16, edgexType string) (any, error) {
-	switch edgexType {
-	case "Int16":
-		return int16(val), nil
-	case "Uint16":
-		return val, nil
-	case "Int32":
-		return int32(val), nil
-	case "Uint32":
-		return uint32(val), nil
-	case "Int64":
-		return int64(val), nil
-	case "Uint64":
-		return uint64(val), nil
-	case "Float32":
-		return float32(val), nil
-	case "Float64":
-		return float64(val), nil
-	default:
-		return val, nil
-	}
-}
-
 // HandleReadCommands triggers a Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	for protocolName, protocolProperties := range protocols {
@@ -187,27 +136,11 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			continue
 		}
 
-		// Build model.Resource list from EdgeX CommandRequests
-		resources := make([]*model.Resource, len(reqs))
-		for i, r := range reqs {
-			resources[i] = model.NewResource(r)
-			cd.lc.Debugf("\n### resources: %v resources", resources[i])
-		}
-
-		// Single point: use ReadSingle
+		// Check if there is only one request.
 		if len(reqs) == 1 {
-			if err := reader.ReadSingle(resources[0]); err != nil {
-				cd.lc.Errorf("ReadSingle failed for res: %s, device: %s, err: %v", reqs[0].DeviceResourceName, deviceName, err)
-				continue
-			}
-			converted, convErr := convertToEdgeXValue(resources[0].Value, reqs[0].Type, resources[0].Parser)
-			if convErr != nil {
-				cd.lc.Errorf("Failed to convert value for %s, device: %s, err: %v", reqs[0].DeviceResourceName, deviceName, convErr)
-				continue
-			}
-			cv, createErr := sdkModels.NewCommandValue(reqs[0].DeviceResourceName, reqs[0].Type, converted)
-			if createErr != nil {
-				cd.lc.Errorf("Failed to create CommandValue for %s, device: %s, err: %v", reqs[0].DeviceResourceName, deviceName, createErr)
+			cv, singleErr := cd.handleReadSingle(deviceName, reqs[0], reader)
+			if singleErr != nil {
+				// Errors are already logged inside handleReadSingle.
 				continue
 			}
 			res = []*sdkModels.CommandValue{cv}
@@ -215,35 +148,26 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			continue
 		}
 
-		// Multiple points: use ReadBatch
-		batchErr := reader.ReadBatch(resources)
-		if batchErr != nil {
-			cd.lc.Errorf("ReadBatch failed for device: %s, err: %v", deviceName, batchErr)
+		resources := make([]*protocol.Resource, len(reqs))
+		for i, r := range reqs {
+			resources[i] = protocol.NewResource(r)
 		}
+		//
+		//batchErr := reader.ReadBatch(resources)
+		//if batchErr != nil {
+		//	cd.lc.Errorf("ReadBatch failed for device: %s, err: %v", deviceName, batchErr)
+		//}
 
 		res = make([]*sdkModels.CommandValue, len(reqs))
 		for idx, r := range reqs {
-			// Fall back to ReadSingle only when batch read failed
-			if batchErr != nil {
-				if err := reader.ReadSingle(resources[idx]); err != nil {
-					cd.lc.Errorf("ReadSingle failed for res: %s, device: %s, err: %v", r.DeviceResourceName, deviceName, err)
-					continue
-				}
-			}
-			converted, convErr := convertToEdgeXValue(resources[idx].Value, r.Type, resources[idx].Parser)
-			if convErr != nil {
-				cd.lc.Errorf("Failed to convert value for %s: %v", r.DeviceResourceName, convErr)
-				continue
-			}
-			cv, createErr := sdkModels.NewCommandValue(r.DeviceResourceName, r.Type, converted)
-			if createErr != nil {
-				cd.lc.Errorf("Failed to create CommandValue for %s: %v", r.DeviceResourceName, createErr)
+			cv, singleErr := cd.handleReadSingle(deviceName, r, reader)
+			if singleErr != nil {
 				continue
 			}
 			res[idx] = cv
 			cd.readCommandsExecuted.Inc(1)
 		}
-		cd.lc.Debugf("## Read ok: %v resources", res)
+		cd.lc.Debugf("## Res Return: %v", res)
 	}
 	return
 }
@@ -310,6 +234,34 @@ func (cd *CompositeDriver) Discover() {
 
 	time.Sleep(time.Duration(cd.serviceConfig.SimpleCustom.Writable.DiscoverSleepDurationSecs) * time.Second)
 	cd.deviceCh <- res
+}
+
+// handleReadSingle processes a single read command.
+func (cd *CompositeDriver) handleReadSingle(deviceName string, req sdkModels.CommandRequest, reader connector.ReadClient) (*sdkModels.CommandValue, error) {
+	res := protocol.NewResource(req)
+	var err error
+
+	if err = reader.ReadSingle(res); err != nil {
+		cd.lc.Errorf("@read failed read: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
+		return nil, err
+	}
+
+	if res.Decoder != "" {
+		res.Value, err = parser.DecodeRawData(res.Decoder, res.Value)
+		if err != nil {
+			cd.lc.Errorf("@read failed parse: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
+			return nil, err
+		}
+	}
+
+	cv, err := sdkModels.NewCommandValue(req.DeviceResourceName, req.Type, res.Value)
+	if err != nil {
+		cd.lc.Errorf("@read failed cmdVal: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
+		return nil, err
+	}
+
+	cd.lc.Debugf("@read ok: dev %s, res %s, addr %v, len %d, val %v ", deviceName, res.Name, res.Address, res.Length, res.Value)
+	return cv, nil
 }
 
 // processReceiveData reads from dataCh and pushes to EdgeX

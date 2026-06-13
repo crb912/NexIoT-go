@@ -14,12 +14,12 @@ import (
 )
 
 // Polls manages protocol connpool connections.
-// It caches ReaderAdapter instances keyed by "<protocol>:<endpoint>".
+// It caches ReadClient instances keyed by "<protocol>:<endpoint>".
 type Polls struct {
 	mu      sync.RWMutex
 	timeout time.Duration
 	maxSize int
-	clients map[string]ReaderAdapter
+	clients map[string]ReadClient
 }
 
 type ProtocolConfig interface {
@@ -49,7 +49,7 @@ func WithMaxCounts(n int) Option {
 // NewPolls creates a new Polls with default settings and applies options.
 func NewPolls(opts ...Option) *Polls {
 	p := &Polls{
-		clients: make(map[string]ReaderAdapter),
+		clients: make(map[string]ReadClient),
 		timeout: 5 * time.Second, // Default timeout
 		maxSize: 100,             // Default max connections
 	}
@@ -61,8 +61,8 @@ func NewPolls(opts ...Option) *Polls {
 }
 
 // GetReader returns an existing connection or creates a new one.
-func (p *Polls) GetReader(pc ProtocolConfig) (ReaderAdapter, error) {
-	protocol, err := validateProtocol(pc.GetProtocolName())
+func (p *Polls) GetReader(pc ProtocolConfig) (ReadClient, error) {
+	protocol_, err := validateProtocol(pc.GetProtocolName())
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (p *Polls) GetReader(pc ProtocolConfig) (ReaderAdapter, error) {
 	}
 
 	// Create and connect the new adapter.
-	newAdapter, err := p.newPoll(endpoint, protocol, pc.GetTimeout(), pc.GetAll())
+	newAdapter, err := p.newPoll(endpoint, protocol_, pc.GetTimeout(), pc.GetAll())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for endpoint %s: %w", endpoint, err)
 	}
@@ -118,20 +118,20 @@ func (p *Polls) DisconnectAll() {
 
 // register stores a connpool under the given key.
 // Caller must hold p.mu write lock.
-func (p *Polls) register(key string, client ReaderAdapter) {
+func (p *Polls) register(key string, client ReadClient) {
 	p.clients[key] = client
 }
 
-// newPoll is a factory that returns the correct ReaderAdapter
+// newPoll is a factory that returns the correct ReadClient
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newPoll(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReaderAdapter, error) {
+func (p *Polls) newPoll(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
 	switch protocolName {
-	case protocol.ProtocolModbusTCP:
-		return newModbusPoll(endpoint, protocol.ProtocolModbusTCP, timeout, args)
-	case protocol.ProtocolModbusRTU:
+	case protocol.ModbusTCP:
+		return newModbusPoll(endpoint, protocol.ModbusTCP, timeout, args)
+	case protocol.ModbusRTU:
 
-		return newModbusPoll(endpoint, protocol.ProtocolModbusRTU, timeout, args)
+		return newModbusPoll(endpoint, protocol.ModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
@@ -140,11 +140,11 @@ func (p *Polls) newPoll(endpoint string, protocolName protocol.ProtocolType, tim
 func validateProtocol(protocolName string) (protocol.ProtocolType, error) {
 	switch protocolName {
 	case "modbus-tcp":
-		return protocol.ProtocolModbusTCP, nil
+		return protocol.ModbusTCP, nil
 	case "modbus-rtu":
-		return protocol.ProtocolModbusRTU, nil
+		return protocol.ModbusRTU, nil
 	default:
-		return protocol.ProtocolUnknown, errors.New("not support protocol type")
+		return protocol.Unknown, errors.New("not support protocol type")
 	}
 }
 

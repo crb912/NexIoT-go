@@ -4,7 +4,6 @@ package poller
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/model"
 	"octopus-edge/pkg/protocol"
 	"strings"
 	"testing"
@@ -15,7 +14,7 @@ import (
 
 // ─── Mock implementation ─────────────────────────────────────────────────────
 
-// mockModbusClient is a fully controllable stand-in for modbusClientIface.
+// mockModbusClient is a fully controllable stand-in for Client.
 // Each field controls the behaviour of the matching method.
 type mockModbusClient struct {
 	// Open/Close controls
@@ -71,7 +70,7 @@ func (m *mockModbusClient) ReadCoils(address, quantity uint16) ([]bool, error) {
 
 // ─── Helper: build a ModbusClient wired to a mock ────────────────────────────
 
-func newMockedModbusClient(mock modbusClientIface) *ModbusClient {
+func newMockedModbusClient(mock Client) *ModbusClient {
 	mc := &ModbusClient{
 		EndPoint:  "tcp://127.0.0.1:502",
 		Timeout:   1 * time.Second,
@@ -83,8 +82,8 @@ func newMockedModbusClient(mock modbusClientIface) *ModbusClient {
 
 // ─── Helper: build a model.Resource for testing ──────────────────────────────
 
-func newTestResource(addr any, length int, primaryTable string) *model.Resource {
-	r := &model.Resource{
+func newTestResource(addr any, length int, primaryTable string) *protocol.Resource {
+	r := &protocol.Resource{
 		Name:    fmt.Sprintf("res-%v", addr),
 		Address: addr,
 		Length:  length,
@@ -229,7 +228,7 @@ func TestConvAddress(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := convAddress(tt.addr)
+			got, err := convProtocolAddr(tt.addr)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("convAddress(%v) expected error, got nil", tt.addr)
@@ -256,7 +255,7 @@ func TestGetTableType(t *testing.T) {
 	tests := []struct {
 		name string
 		args map[string]any
-		want tableType
+		want functionCode
 	}{
 		{name: "nil args", args: nil, want: tableHoldingRegisters},
 		{name: "empty args", args: map[string]any{}, want: tableHoldingRegisters},
@@ -286,7 +285,7 @@ func TestGetTableType(t *testing.T) {
 
 func TestGetProtocolType(t *testing.T) {
 	mc := &ModbusClient{}
-	if got := mc.GetProtocolType(); got != protocol.ProtocolModbusTCP {
+	if got := mc.GetProtocolType(); got != protocol.ModbusTCP {
 		// Note: ProtocolModbusTCP is the zero-value default for ModbusClient.ProtocolType.
 		// The actual value depends on how the client was constructed.
 		t.Logf("GetProtocolType() = %q, expected may vary based on construction", got)
@@ -631,7 +630,7 @@ func TestReadBatch_EmptyInput(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	err := mc.ReadBatch([]*model.Resource{})
+	err := mc.ReadBatch([]*protocol.Resource{})
 
 	if err != nil {
 		t.Fatalf("ReadBatch([]) unexpected error: %v", err)
@@ -647,7 +646,7 @@ func TestReadBatch_HoldingRegisters_SinglePoint(t *testing.T) {
 	mock := &mockModbusClient{readRegs: []uint16{0x00FF}}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 	}
 	err := mc.ReadBatch(points)
@@ -671,7 +670,7 @@ func TestReadBatch_HoldingRegisters_Contiguous(t *testing.T) {
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(3), 1, "HOLDING_REGISTERS"),
@@ -705,7 +704,7 @@ func TestReadBatch_HoldingRegisters_Sparse(t *testing.T) {
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(5), 1, "HOLDING_REGISTERS"),
 	}
@@ -732,7 +731,7 @@ func TestReadBatch_SpanTooLarge(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(127), 1, "HOLDING_REGISTERS"),
 	}
@@ -753,7 +752,7 @@ func TestReadBatch_BatchReadError(t *testing.T) {
 	mock := &mockModbusClient{readErr: deviceErr}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
 	}
@@ -774,7 +773,7 @@ func TestReadBatch_Coils(t *testing.T) {
 	mock := &mockModbusClient{readCoils: coils}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(0), 1, "COILS"),
 		newTestResource(float64(2), 1, "COILS"),
 		newTestResource(float64(4), 1, "COILS"),
@@ -811,7 +810,7 @@ func TestReadBatch_MixedTableTypes(t *testing.T) {
 	}
 	mc := newMockedModbusClient(mock)
 
-	points := []*model.Resource{
+	points := []*protocol.Resource{
 		newTestResource(float64(16), 1, "HOLDING_REGISTERS"),
 		newTestResource(float64(8), 2, "COILS"),
 	}
