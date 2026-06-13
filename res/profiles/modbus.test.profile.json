@@ -36,7 +36,7 @@
         "primaryTable": "HOLDING_REGISTERS"
       },
       "properties": {
-        "valueType": "Int16",
+        "valueType": "Uint16",
         "readWrite": "R",
         "scale": "1",
         "minimum": "0",
@@ -81,13 +81,9 @@
             "1": "Heat",
             "2": "Auto",
             "3": "Dry",
-            "4": "HAUX",
-            "5": "Fan",
-            "6": "HH",
-            "8": "VAM Auto",
-            "9": "VAM Bypass",
             "10": "VAM Heat",
-            "11": "VAM Normal"
+            "11": "VAM Normal",
+            "15": "Fan"
           }
         }
       ]
