@@ -1,91 +1,299 @@
 {
-  "name": "Test-Device-Modbus-Profile",
-  "manufacturer": "no manufacturer",
-  "model": "CoolMasterNet",
+  "name": "Test-Battery-Profile",
+  "manufacturer": "Unkown Battery",
+  "model": "SBMS",
   "labels": [
-    "HVAC",
-    "Air conditioner"
+    "BMS",
+    "Battery"
   ],
-  "description": "Profile for modbus testing",
+  "description": "Profile for battery management system",
   "deviceResources": [
     {
-      "name": "SwitchA",
-      "isHidden": false,
-      "description": "On/Off , 0-OFF 1-ON",
-      "attributes": {
-        "address": 8,
-        "length": 1,
-        "primaryTable": "COILS"
-      },
-      "properties": {
-        "valueType": "Bool",
-        "readWrite": "R",
-        "scale": "1",
-        "minimum": "0",
-        "maximum": "1",
-        "defaultValue": "0"
-      }
-    },
-    {
-      "name": "OperationMode",
+      "name": "reserved_1",
       "isHidden": true,
-      "description": "0-Cool 1-Heat 2-Auto 3-Dry 4-HAUX 5-Fan 6-HH 8-VAM Auto 9-VAM Bypass 10-VAM Heat Exc 11-VAM Normal",
-      "attributes": {
-        "address": 16,
-        "length": 1,
-        "primaryTable": "HOLDING_REGISTERS"
-      },
-      "properties": {
-        "valueType": "Uint16",
-        "readWrite": "R",
-        "scale": "1",
-        "minimum": "0",
-        "maximum": "11",
-        "defaultValue": "0"
-      }
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8000, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
     },
     {
-      "name": "MacAddress",
+      "name": "reserved_2",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8001, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "reserved_3",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8002, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "battery_pack_nums",
       "isHidden": false,
-      "description": "Mac Address",
-      "attributes": {
-        "primaryTable": "INPUT_REGISTERS",
-        "address": 32,
-        "length": 3,
-        "decodefunc": "parseMACAddress"
-      },
-      "properties": {
-        "valueType": "String",
-        "readWrite": "R"
-      }
+      "description": "Number of battery packs, 1-4, default 4",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8003, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "1", "maximum": "4", "defaultValue": "4" }
+    },
+    {
+      "name": "battery_pack_1_cells",
+      "isHidden": false,
+      "description": "Pack 1 cell count, max 250",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8004, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "250" }
+    },
+    {
+      "name": "battery_pack_2_cells",
+      "isHidden": false,
+      "description": "Pack 2 cell count, max 250",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8005, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "250" }
+    },
+    {
+      "name": "battery_pack_3_cells",
+      "isHidden": false,
+      "description": "Pack 3 cell count, max 250",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8006, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "250" }
+    },
+    {
+      "name": "battery_pack_4_cells",
+      "isHidden": false,
+      "description": "Pack 4 cell count, max 250",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8007, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "250" }
+    },
+    {
+      "name": "battery_pack_1_type",
+      "isHidden": false,
+      "description": "Pack 1 battery type, 8007: 2V, 8008: 6V, 8009: 12V",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8008, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "defaultValue": "2" }
+    },
+    {
+      "name": "battery_pack_2_type",
+      "isHidden": false,
+      "description": "Pack 2 battery type, 0: 2V, 1: 6V, 2: 12V",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8009, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "defaultValue": "2" }
+    },
+    {
+      "name": "battery_pack_3_type",
+      "isHidden": false,
+      "description": "Pack 3 battery type, 0: 2V, 1: 6V, 2: 12V",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8010, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "defaultValue": "2" }
+    },
+    {
+      "name": "battery_pack_4_type",
+      "isHidden": false,
+      "description": "Pack 4 battery type, 0: 2V, 1: 6V, 2: 12V",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8011, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "defaultValue": "2" }
+    },
+    {
+      "name": "battery_pack_1_capacity",
+      "isHidden": false,
+      "description": "Pack 1 capacity (AH), 7~5000",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8012, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "7", "maximum": "5000" }
+    },
+    {
+      "name": "battery_pack_2_capacity",
+      "isHidden": false,
+      "description": "Pack 2 capacity (AH), 7~5000",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8013, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "7", "maximum": "5000" }
+    },
+    {
+      "name": "battery_pack_3_capacity",
+      "isHidden": false,
+      "description": "Pack 3 capacity (AH), 7~5000",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8014, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "7", "maximum": "5000" }
+    },
+    {
+      "name": "battery_pack_4_capacity",
+      "isHidden": false,
+      "description": "Pack 4 capacity (AH), 7~5000",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8015, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "7", "maximum": "5000" }
+    },
+    {
+      "name": "reserved_4",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8016, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "reserved_5",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8017, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "reserved_6",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8018, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "reserved_7",
+      "isHidden": true,
+      "description": "Reserved",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8019, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "R" }
+    },
+    {
+      "name": "reserved_8",
+      "isHidden": true,
+      "description": "Reserved (3 words)",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8020, "length": 3 },
+      "properties": { "valueType": "Uint16Array", "readWrite": "R" }
+    },
+    {
+      "name": "mac_address",
+      "isHidden": false,
+      "description": "6-byte MAC address",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8023, "length": 3, "decodefunc": "decodeMACAddress" },
+      "properties": { "valueType": "String", "readWrite": "R" }
+    },
+    {
+      "name": "ip_address",
+      "isHidden": false,
+      "description": "Network IP address",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8026, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.20" }
+    },
+    {
+      "name": "gateway",
+      "isHidden": false,
+      "description": "Gateway IP address",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8028, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.1" }
+    },
+    {
+      "name": "subnet_mask",
+      "isHidden": false,
+      "description": "Subnet mask",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8030, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "255.255.255.0" }
+    },
+    {
+      "name": "dns",
+      "isHidden": false,
+      "description": "Network DNS",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8032, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.1.1"}
+    },
+    {
+      "name": "socket_port",
+      "isHidden": false,
+      "description": "Socket target port",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8034, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "defaultValue": "502" }
+    },
+    {
+      "name": "target_ip_address",
+      "isHidden": false,
+      "description": "Target server IP address",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8035, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.100" }
+    },
+    {
+      "name": "year",
+      "isHidden": false,
+      "description": "Year",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8300, "length": 2 },
+      "properties": { "valueType": "Uint32", "readWrite": "RW", "minimum": "2000" }
+    },
+    {
+      "name": "month",
+      "isHidden": false,
+      "description": "Month",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8302, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "1", "maximum": "12" }
+    },
+    {
+      "name": "day",
+      "isHidden": false,
+      "description": "Day",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8303, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "1", "maximum": "31" }
+    },
+    {
+      "name": "hour",
+      "isHidden": false,
+      "description": "Hour",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8304, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "23" }
+    },
+    {
+      "name": "minute",
+      "isHidden": false,
+      "description": "Minute",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8305, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "59" }
+    },
+    {
+      "name": "second",
+      "isHidden": false,
+      "description": "Second",
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8306, "length": 1 },
+      "properties": { "valueType": "Uint16", "readWrite": "RW", "minimum": "0", "maximum": "59" }
     }
   ],
   "deviceCommands": [
     {
-      "name": "Read-All-Values",
+      "name": "Battery-Config",
       "readWrite": "R",
       "isHidden": false,
       "resourceOperations": [
-        {"deviceResource": "MacAddress"},
-        {
-          "deviceResource": "SwitchA",
-          "mappings": {
-            "true": "ON",
-            "false": "OFF"
-          }
-        },
-        {
-          "deviceResource": "OperationMode",
-          "mappings": {
-            "0": "Cool",
-            "1": "Heat",
-            "2": "Auto",
-            "3": "Dry",
-            "10": "VAM Heat",
-            "11": "VAM Normal",
-            "15": "Fan"
-          }
-        }
+        { "deviceResource": "reserved_1" },
+        { "deviceResource": "reserved_2" },
+        { "deviceResource": "reserved_3" },
+        { "deviceResource": "battery_pack_nums" },
+        { "deviceResource": "battery_pack_1_cells" },
+        { "deviceResource": "battery_pack_2_cells" },
+        { "deviceResource": "battery_pack_3_cells" },
+        { "deviceResource": "battery_pack_4_cells" },
+        { "deviceResource": "battery_pack_1_type", "mappings": {"8007": "2V", "8008": "6V", "8009": "6V", "8010": "6V"}},
+        { "deviceResource": "battery_pack_2_type", "mappings": {"8007": "2V", "8008": "6V", "8009": "6V", "8010": "6V"} },
+        { "deviceResource": "battery_pack_3_type", "mappings": {"8007": "2V", "8008": "6V", "8009": "6V", "8010": "6V"}},
+        { "deviceResource": "battery_pack_4_type", "mappings": {"8007": "2V", "8008": "6V", "8009": "6V", "8010": "6V"} },
+        { "deviceResource": "battery_pack_1_capacity" },
+        { "deviceResource": "battery_pack_2_capacity" },
+        { "deviceResource": "battery_pack_3_capacity" },
+        { "deviceResource": "battery_pack_4_capacity" },
+        { "deviceResource": "reserved_4" },
+        { "deviceResource": "reserved_5" },
+        { "deviceResource": "reserved_6" },
+        { "deviceResource": "reserved_7" },
+        { "deviceResource": "reserved_8" },
+        { "deviceResource": "mac_address" },
+        { "deviceResource": "ip_address" },
+        { "deviceResource": "gateway" },
+        { "deviceResource": "subnet_mask" },
+        { "deviceResource": "dns" },
+        { "deviceResource": "socket_port" },
+        { "deviceResource": "target_ip_address" }
+      ]
+    },
+    {
+      "name": "System-Time",
+      "readWrite": "R",
+      "isHidden": false,
+      "resourceOperations": [
+        { "deviceResource": "year" },
+        { "deviceResource": "month" },
+        { "deviceResource": "day" },
+        { "deviceResource": "hour" },
+        { "deviceResource": "minute" },
+        { "deviceResource": "second" }
       ]
     }
   ]

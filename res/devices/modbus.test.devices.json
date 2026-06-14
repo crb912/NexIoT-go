@@ -1,10 +1,10 @@
 [
   {
     "name": "Modbus-TCP-RTU-test-device",
-    "profileName": "Test-Device-Modbus-Profile",
+    "profileName": "Test-Battery-Profile",
     "description": "This device is a product for monitoring and controlling digital inputs and outputs.",
     "labels": [
-      "Air conditioner",
+      "Battery",
       "modbus TCP",
       "modbus RTU"
     ],
@@ -35,7 +35,12 @@
       {
         "interval": "20s",
         "onChange": false,
-        "sourceName": "Read-All-Values"
+        "sourceName": "Battery-Config"
+      },
+      {
+        "interval": "30s",
+        "onChange": false,
+        "sourceName": "System-Time"
       }
     ]
   }
