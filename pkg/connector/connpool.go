@@ -14,14 +14,14 @@ type Session interface {
 
 // Reader defines the standard read interface for all protocol plugins.
 type Reader interface {
-	ReadSingle(ponit *protocol.Resource) error
-	ReadBatch(ponits []*protocol.Resource) error
+	ReadSingle(point *protocol.Resource) error
+	ReadBatch(points []protocol.Resource) error
 }
 
 // Writer defines the standard write interface for all protocol plugins.
 type Writer interface {
-	WriteSingle(ponit *protocol.Resource) error
-	WriteBatch(ponits []*protocol.Resource) error // 连续写 n 个点
+	WriteSingle(point *protocol.Resource) error
+	WriteBatch(points []protocol.Resource) error // 连续写 n 个点
 }
 
 // ReadClient embeds the Reader interface with lifecycle management.

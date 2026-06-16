@@ -30,11 +30,10 @@ type Resource struct {
 }
 
 // NewResource converts EdgeX model to generic Resource
-func NewResource(deviceRes sdkModels.CommandRequest) *Resource {
+func NewResource(deviceRes sdkModels.CommandRequest) Resource {
 	res := Resource{
 		Name: deviceRes.DeviceResourceName,
 		Type: deviceRes.Type,
-		Args: make(map[string]any),
 	}
 
 	for key, value := range deviceRes.Attributes {
@@ -46,10 +45,22 @@ func NewResource(deviceRes sdkModels.CommandRequest) *Resource {
 		case "decodefunc":
 			res.Decoder, _ = value.(string)
 		default:
+			if res.Args == nil {
+				res.Args = make(map[string]any)
+			}
 			res.Args[key] = value
 		}
 	}
-	return &res
+	return res
+}
+
+// NewResourceN converts EdgeX model to generic Resource Slice
+func NewResourceN(deviceResList []sdkModels.CommandRequest) []Resource {
+	res := make([]Resource, len(deviceResList))
+	for i, deviceRes := range deviceResList {
+		res[i] = NewResource(deviceRes)
+	}
+	return res
 }
 
 // AsyncData defines the unified structure for pushed data

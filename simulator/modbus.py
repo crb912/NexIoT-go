@@ -14,6 +14,20 @@ from pymodbus.datastore import (
 # Configure basic logging
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+set_val = {
+    "subnet_mask": "255.255.255.0",
+    "ip_address": "192.168.1.1",
+    "gateway": "192.168.1.254",
+    "mac_addres": "11:AA:22:BB",
+    "dns": "8.8.8.8",
+    "year": 2026,
+    "month": 6,
+    "day": 12,
+    "hour": 20,
+    "minute": 1,
+    "second": 59
+}
+
 class JsonDataBlock(ModbusSequentialDataBlock):
     def __init__(self, memory_store, is_bit=False):
         self.is_bit = is_bit
@@ -84,7 +98,6 @@ class JsonDataBlock(ModbusSequentialDataBlock):
 # ==========================================
 
 def load_json_profile(file_path):
-    # Dictionary to hold the initial Modbus memory map
     memory = {}
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -96,7 +109,6 @@ def load_json_profile(file_path):
         logging.error("Failed to parse the JSON file.")
         return memory
 
-    # Loop through resources to build memory map
     for resource in profile.get("deviceResources", []):
         attrs = resource.get("attributes", {})
         props = resource.get("properties", {})
@@ -105,39 +117,23 @@ def load_json_profile(file_path):
         if "address" not in attrs:
             continue
 
-        # FIX: The JSON address is a Logical Address (1-based).
-        # We must subtract 1 to store it as a physical Wire Address (0-based).
         logical_addr = attrs["address"]
         wire_addr = logical_addr - 1
-
         length = attrs.get("length", 1)
         default_val = props.get("defaultValue")
 
-        # ---------------------------------------------------------
-        # Inject meaningful default values if missing or override
-        # ---------------------------------------------------------
-        if name == "subnet_mask":
-            default_val = "255.255.255.0"
-        elif name == "ip_address":
-            default_val = "192.168.1.1"
-        elif name == "gateway":
-            default_val = "192.168.1.254"
-        elif name == "dns" and not default_val:
-            default_val = "8.8.8.8"
-        elif name == "mac_address" and not default_val:
-            default_val = "00:1A:2B:3C:4D:5E" # Mock MAC Address
+        if name in set_val:
+            default_val = set_val[name]
 
         if default_val is not None:
             decode_func = attrs.get("decodefunc", "")
 
-            # FIX: Parse MAC Address (6 bytes into 3 words)
+            # MAC 地址（3个寄存器）
             if "decodeMACAddress" in decode_func or name == "mac_address":
                 try:
-                    # Remove colons and convert hex string to bytes
                     clean_mac = str(default_val).replace(":", "")
                     mac_bytes = bytes.fromhex(clean_mac)
                     if len(mac_bytes) == 6:
-                        # Unpack 6 bytes into three 16-bit unsigned integers
                         regs = struct.unpack(">HHH", mac_bytes)
                         memory[wire_addr] = regs[0]
                         memory[wire_addr + 1] = regs[1]
@@ -145,12 +141,10 @@ def load_json_profile(file_path):
                 except ValueError:
                     logging.warning(f"Invalid MAC address format: {default_val}")
 
-            # FIX: Parse IPv4 Address (4 bytes into 2 words)
+            # IPv4 地址（2个寄存器，大端）
             elif "decodeIPv4Address" in decode_func or name in ["ip_address", "subnet_mask", "gateway", "dns", "target_ip_address"]:
                 try:
-                    # Convert IP string to 4 bytes
                     packed_ip = socket.inet_aton(str(default_val))
-                    # Unpack 4 bytes into two 16-bit unsigned integers
                     regs = struct.unpack(">HH", packed_ip)
                     memory[wire_addr] = regs[0]
                     if length > 1:
@@ -158,13 +152,25 @@ def load_json_profile(file_path):
                 except socket.error:
                     logging.warning(f"Invalid IP address format: {default_val}")
 
-            # Handle standard integer values (like socket_port = 502)
+            # 32位整数（2个寄存器，大端字序，和IP保持一致）
+            elif length == 2 and isinstance(default_val, int):
+                try:
+                    # 大端打包 uint32，再拆成两个 uint16
+                    packed_u32 = struct.pack(">I", default_val)
+                    regs = struct.unpack(">HH", packed_u32)
+                    memory[wire_addr] = regs[0]      # 低地址 = 高字
+                    memory[wire_addr + 1] = regs[1]  # 高地址 = 低字
+                except struct.error:
+                    logging.warning(f"Invalid uint32 value: {default_val}")
+
+            # 普通 16位整数
             else:
                 try:
                     memory[wire_addr] = int(default_val)
                 except ValueError:
                     pass
 
+    # 移除硬编码的 memory[8300] = 0，由上面的 length=2 逻辑自动处理
     logging.info(f"Loaded {len(memory)} predefined registers from JSON profile.")
     return memory
 

@@ -160,7 +160,7 @@ func (m *ModbusClient) ReadSingle(res *protocol.Resource) error {
 }
 
 // ReadBatch reads data for a list of points in one request.
-func (m *ModbusClient) ReadBatch(points []*protocol.Resource) error {
+func (m *ModbusClient) ReadBatch(points []protocol.Resource) error {
 	minAddr, quantity := calculateBatchSpan(points)
 
 	tt := getTableType(points[0].Args)
@@ -195,7 +195,7 @@ func (m *ModbusClient) read(addressStart uint16, quantity uint16, tt tableType) 
 }
 
 // calculateBatchSpan gets the start address and total length.
-func calculateBatchSpan(points []*protocol.Resource) (minAddr uint16, quantity uint16) {
+func calculateBatchSpan(points []protocol.Resource) (minAddr uint16, quantity uint16) {
 	minAddr = 0xFFFF
 	var maxEnd uint16 = 0
 
@@ -219,14 +219,14 @@ func calculateBatchSpan(points []*protocol.Resource) (minAddr uint16, quantity u
 }
 
 // assignResValues sets the correct data slice for each resource.
-func assignResValues[T bool | uint16](points []*protocol.Resource, minAddr uint16, data []T) {
-	for _, p := range points {
-		addr := uint16(p.Address.(float64))
+func assignResValues[T bool | uint16](points []protocol.Resource, minAddr uint16, data []T) {
+	for i := range points {
+		addr := uint16(points[i].Address.(float64))
 		offset := addr - minAddr
 
 		// Safety check to prevent index out of range panic.
-		if int(offset)+int(p.Length) <= len(data) {
-			p.Value = extractValue(data[offset:offset+p.Length], p.Type, p.Length)
+		if int(offset)+int(points[i].Length) <= len(data) {
+			points[i].Value = extractValue(data[offset:offset+points[i].Length], points[i].Type, points[i].Length)
 		}
 	}
 }

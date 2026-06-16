@@ -132,42 +132,28 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 		pc := parser.NewProtocolConfig(protocolName, &protocolProperties)
 		reader, err := cd.polls.GetReader(pc)
 		if err != nil {
-			cd.lc.Error("No reader for protocol: %s, device: %s, err: %v", protocolName, deviceName, err)
+			cd.lc.Errorf("No reader for protocol: %s, device: %s, err: %v", protocolName, deviceName, err)
 			continue
 		}
 
-		// Check if there is only one request.
 		if len(reqs) == 1 {
 			cv, singleErr := cd.handleReadSingle(deviceName, reqs[0], reader)
 			if singleErr != nil {
 				// Errors are already logged inside handleReadSingle.
 				continue
 			}
-			res = []*sdkModels.CommandValue{cv}
+			res = append(res, cv)
 			cd.readCommandsExecuted.Inc(1)
 			continue
 		}
 
-		resources := make([]*protocol.Resource, len(reqs))
-		for i, r := range reqs {
-			resources[i] = protocol.NewResource(r)
+		cvList, err := cd.handleReadBatch(deviceName, reqs, reader)
+		if err != nil {
+			continue
 		}
-		//
-		//batchErr := reader.ReadBatch(resources)
-		//if batchErr != nil {
-		//	cd.lc.Errorf("ReadBatch failed for device: %s, err: %v", deviceName, batchErr)
-		//}
+		res = append(res, cvList...)
+		cd.readCommandsExecuted.Inc(1)
 
-		res = make([]*sdkModels.CommandValue, len(reqs))
-		for idx, r := range reqs {
-			cv, singleErr := cd.handleReadSingle(deviceName, r, reader)
-			if singleErr != nil {
-				continue
-			}
-			res[idx] = cv
-			cd.readCommandsExecuted.Inc(1)
-		}
-		cd.lc.Debugf("## Res Return: %v", res)
 	}
 	return
 }
@@ -240,8 +226,7 @@ func (cd *CompositeDriver) Discover() {
 func (cd *CompositeDriver) handleReadSingle(deviceName string, req sdkModels.CommandRequest, reader connector.ReadClient) (*sdkModels.CommandValue, error) {
 	res := protocol.NewResource(req)
 	var err error
-
-	if err = reader.ReadSingle(res); err != nil {
+	if err = reader.ReadSingle(&res); err != nil {
 		cd.lc.Errorf("@read failed read: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
 		return nil, err
 	}
@@ -262,6 +247,36 @@ func (cd *CompositeDriver) handleReadSingle(deviceName string, req sdkModels.Com
 
 	cd.lc.Debugf("@read ok: dev %s, res %s, addr %v, len %d, val %v ", deviceName, res.Name, res.Address, res.Length, res.Value)
 	return cv, nil
+}
+
+// handleReadSingle processes a single read command.
+func (cd *CompositeDriver) handleReadBatch(deviceName string, req []sdkModels.CommandRequest, reader connector.ReadClient) ([]*sdkModels.CommandValue, error) {
+	resList := protocol.NewResourceN(req)
+	var err error
+	if err = reader.ReadBatch(resList); err != nil {
+		cd.lc.Errorf("@readBatch failed read: dev %s, err %v", deviceName, err)
+		return nil, err
+	}
+
+	cvList := make([]*sdkModels.CommandValue, 0, len(req))
+	for i := range resList {
+		if resList[i].Decoder != "" {
+			resList[i].Value, err = parser.DecodeRawData(resList[i].Decoder, resList[i].Value)
+			if err != nil {
+				cd.lc.Errorf("@read failed parse: dev %s, res %s, err %v", deviceName, req[i].DeviceResourceName, err)
+				continue
+			}
+		}
+
+		cv, err := sdkModels.NewCommandValue(req[i].DeviceResourceName, req[i].Type, resList[i].Value)
+		if err != nil {
+			cd.lc.Errorf("@read failed cmdVal: dev %s, res %s, err %v", deviceName, req[i].DeviceResourceName, err)
+			continue
+		}
+		cd.lc.Debugf("@read ok: dev %s, res %s, addr %v, len %d, val %v ", deviceName, resList[i].Name, resList[i].Address, resList[i].Length, resList[i].Value)
+		cvList = append(cvList, cv)
+	}
+	return cvList, nil
 }
 
 // processReceiveData reads from dataCh and pushes to EdgeX

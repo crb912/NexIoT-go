@@ -10,6 +10,7 @@ type DecoderFunc func(any) (any, error)
 var decoderMap = map[string]DecoderFunc{
 	"decodeMACAddress":  decodeMACAddress,
 	"decodeIPv4Address": decodeIPv4Address,
+	"toUnit32":          toUnit32,
 }
 
 // DecodeRawData looks up the parser by name and executes it with the provided raw data.
@@ -64,4 +65,21 @@ func decodeIPv4Address(rawData any) (any, error) {
 	)
 
 	return ip, nil
+}
+
+// toUnit32 converts 2 uint16 registers into a uint32 value
+// Modbus standard: data[0] = high word, data[1] = low word
+func toUnit32(rawData any) (any, error) {
+	data, ok := rawData.([]uint16)
+	if !ok {
+		return uint32(0), fmt.Errorf("invalid data type: expected []uint16, got %T", rawData)
+	}
+
+	if len(data) < 2 {
+		return uint32(0), fmt.Errorf("data too short for uint32: expected 2, got %d", len(data))
+	}
+
+	// highWord << 16 | lowWord
+	val := uint32(data[0])<<16 | uint32(data[1])
+	return val, nil
 }
