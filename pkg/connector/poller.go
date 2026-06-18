@@ -1,4 +1,4 @@
-// Package connector manages IoT protocol clients.
+// Package connector manages IoT protocol clients/servers.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
 package connector
@@ -6,6 +6,7 @@ package connector
 import (
 	"errors"
 	"fmt"
+	"octopus-edge/pkg/cache"
 	"octopus-edge/pkg/parser"
 	"octopus-edge/pkg/protocol"
 	"octopus-edge/pkg/protocol/poller"
@@ -20,13 +21,6 @@ type Polls struct {
 	timeout time.Duration
 	maxSize int
 	clients map[string]ReadClient
-}
-
-type ProtocolConfig interface {
-	GetEndpoint() string
-	GetProtocolName() string
-	GetTimeout() time.Duration
-	GetAll() map[string]string
 }
 
 // Option is a functional option for configuring the Polls.
@@ -60,9 +54,9 @@ func NewPolls(opts ...Option) *Polls {
 	return p
 }
 
-// GetReader returns an existing connection or creates a new one.
-func (p *Polls) GetReader(pc ProtocolConfig) (ReadClient, error) {
-	protocol_, err := validateProtocol(pc.GetProtocolName())
+// GetHandler returns an existing connection or creates a new one.
+func (p *Polls) GetHandler(pc *cache.ProtocolConfig) (ReadClient, error) {
+	protocol_, err := protocol.ValidateProtocol(pc.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +86,7 @@ func (p *Polls) GetReader(pc ProtocolConfig) (ReadClient, error) {
 	}
 
 	// Create and connect the new adapter.
-	newAdapter, err := p.newPoll(endpoint, protocol_, pc.GetTimeout(), pc.GetAll())
+	newAdapter, err := p.newClient(endpoint, protocol_, pc.GetTimeout(), pc.GetRawProtocolProperties())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for endpoint %s: %w", endpoint, err)
 	}
@@ -101,7 +95,7 @@ func (p *Polls) GetReader(pc ProtocolConfig) (ReadClient, error) {
 		return nil, fmt.Errorf("failed to connect endpoint %s: %w", endpoint, err)
 	}
 
-	p.register(endpoint, newAdapter)
+	p.addClient(endpoint, newAdapter)
 	return newAdapter, nil
 }
 
@@ -116,39 +110,28 @@ func (p *Polls) DisconnectAll() {
 	}
 }
 
-// register stores a connpool under the given key.
+// addClient stores a client under the given key.
 // Caller must hold p.mu write lock.
-func (p *Polls) register(key string, client ReadClient) {
+func (p *Polls) addClient(key string, client ReadClient) {
 	p.clients[key] = client
 }
 
-// newPoll is a factory that returns the correct ReadClient
+// newClient is a factory that returns the correct ReadClient
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newPoll(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
+func (p *Polls) newClient(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
 	switch protocolName {
 	case protocol.ModbusTCP:
-		return newModbusPoll(endpoint, protocol.ModbusTCP, timeout, args)
+		return newModbusClient(endpoint, protocol.ModbusTCP, timeout, args)
 	case protocol.ModbusRTU:
 
-		return newModbusPoll(endpoint, protocol.ModbusRTU, timeout, args)
+		return newModbusClient(endpoint, protocol.ModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
 }
 
-func validateProtocol(protocolName string) (protocol.ProtocolType, error) {
-	switch protocolName {
-	case "modbus-tcp":
-		return protocol.ModbusTCP, nil
-	case "modbus-rtu":
-		return protocol.ModbusRTU, nil
-	default:
-		return protocol.Unknown, errors.New("not support protocol type")
-	}
-}
-
-// newModbusPoll constructs a ModbusClient from a generic args map.
+// newModbusClient constructs a ModbusClient from a generic args map.
 // Keys recognized in args:
 //
 //	"baud_rate"  uint  – serial baud rate (RTU only)
@@ -156,7 +139,7 @@ func validateProtocol(protocolName string) (protocol.ProtocolType, error) {
 //	"stop_bits"  uint  – stop bits        (RTU only, default 1)
 //	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
 //	"timeout"    time.Duration – overrides the pool-level timeout
-func newModbusPoll(endpoint string, pt protocol.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
+func newModbusClient(endpoint string, pt protocol.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
 	c := &poller.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,

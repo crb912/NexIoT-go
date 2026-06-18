@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"errors"
+
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
 
@@ -63,9 +65,15 @@ func NewResourceN(deviceResList []sdkModels.CommandRequest) []Resource {
 	return res
 }
 
-// AsyncData defines the unified structure for pushed data
-type AsyncData struct {
-	DeviceName   string
-	ResourceName string
-	Value        interface{}
+func ValidateProtocol(protocolName string) (ProtocolType, error) {
+	switch protocolName {
+	case "modbus-tcp":
+		return ModbusTCP, nil
+	case "modbus-rtu":
+		return ModbusRTU, nil
+	case "mqtt":
+		return MQTT, nil
+	default:
+		return Unknown, errors.New("not support protocol type")
+	}
 }

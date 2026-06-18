@@ -2,7 +2,11 @@ package connector
 
 import (
 	"context"
+	"fmt"
+	"octopus-edge/pkg/parser"
 	"octopus-edge/pkg/protocol"
+
+	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
 
 // Session manages the lifecycle of a connection.
@@ -10,6 +14,7 @@ type Session interface {
 	Connect() error
 	Disconnect() error
 	IsConnected() bool
+	GetProtocolType() protocol.ProtocolType
 }
 
 // Reader defines the standard read interface for all protocol plugins.
@@ -28,14 +33,12 @@ type Writer interface {
 type ReadClient interface {
 	Session
 	Reader
-	GetProtocolType() protocol.ProtocolType
 }
 
 // WriteClient embeds the Writer interface with lifecycle management.
 type WriteClient interface {
 	Session
 	Writer
-	GetProtocolType() protocol.ProtocolType
 }
 
 // RWClient embeds the Reader and Writer interfaces with lifecycle management.
@@ -43,11 +46,59 @@ type RWClient interface {
 	Session
 	Reader
 	Writer
-	GetProtocolType() protocol.ProtocolType
 }
 
 // ReceiverAdapter interface: all passive protocols must implement this
 type ReceiverAdapter interface {
 	Start(ctx context.Context, outCh chan<- *protocol.AsyncData) error
 	Stop() error
+}
+
+// HandleReadSingle processes a single read command.
+func HandleReadSingle(reader ReadClient, req sdkModels.CommandRequest) (*sdkModels.CommandValue, error) {
+	res := protocol.NewResource(req)
+	var err error
+	if err = reader.ReadSingle(&res); err != nil {
+		return nil, err
+	}
+
+	if res.Decoder != "" {
+		res.Value, err = parser.DecodeRawData(res.Decoder, res.Value)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cv, err := sdkModels.NewCommandValue(req.DeviceResourceName, req.Type, res.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return cv, nil
+}
+
+// HandleReadBatch processes a batch read command.
+func HandleReadBatch(reader ReadClient, req []sdkModels.CommandRequest) ([]*sdkModels.CommandValue, error) {
+	resList := protocol.NewResourceN(req)
+	var err error
+	if err = reader.ReadBatch(resList); err != nil {
+		return nil, err
+	}
+
+	cvList := make([]*sdkModels.CommandValue, 0, len(req))
+	for i := range resList {
+		if resList[i].Decoder != "" {
+			resList[i].Value, err = parser.DecodeRawData(resList[i].Decoder, resList[i].Value)
+			if err != nil {
+				return cvList, fmt.Errorf("decode err, res: %s, decoder: %s, %v", resList[i].Name, resList[i].Decoder, err)
+			}
+		}
+
+		cv, err := sdkModels.NewCommandValue(req[i].DeviceResourceName, req[i].Type, resList[i].Value)
+		if err != nil {
+			return cvList, fmt.Errorf("newCmd value err, res: %s, %v", resList[i].Name, err)
+		}
+		cvList = append(cvList, cv)
+	}
+	return cvList, nil
 }

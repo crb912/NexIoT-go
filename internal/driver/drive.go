@@ -5,9 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"octopus-edge/pkg/cache"
 	"octopus-edge/pkg/connector"
-	"octopus-edge/pkg/parser"
-	"octopus-edge/pkg/protocol"
 	"reflect"
 	"time"
 
@@ -25,7 +24,7 @@ const readCommandsExecutedName = "ReadCommandsExecuted"
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
-	dataCh               chan *protocol.AsyncData            // Bridge channel between Receivers and EdgeX
+	dataCh               chan *connector.AsyncData           // Bridge channel between Receivers and EdgeX
 	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
 	ctx                  context.Context
 	cancel               context.CancelFunc
@@ -43,7 +42,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	cd.ctx, cd.cancel = context.WithCancel(context.Background())
 
 	// Initialize channel with buffer size based on expected concurrency
-	cd.dataCh = make(chan *protocol.AsyncData, 100)
+	cd.dataCh = make(chan *connector.AsyncData, 100)
 
 	ds := interfaces.Service()
 	// Log the service version
@@ -124,36 +123,38 @@ func (cd *CompositeDriver) Stop(force bool) error {
 // HandleReadCommands triggers a Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	for protocolName, protocolProperties := range protocols {
-		if isDisabled(protocolProperties) {
+		protocolConfig := cache.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
+
+		if protocolConfig.IsDisabled() {
 			cd.lc.Debugf("Skip device: %s protocol %s (disabled)", deviceName, protocolName)
 			continue
 		}
 
-		pc := parser.NewProtocolConfig(protocolName, &protocolProperties)
-		reader, err := cd.polls.GetReader(pc)
+		reader, err := cd.polls.GetHandler(protocolConfig)
 		if err != nil {
 			cd.lc.Errorf("No reader for protocol: %s, device: %s, err: %v", protocolName, deviceName, err)
 			continue
 		}
 
 		if len(reqs) == 1 {
-			cv, singleErr := cd.handleReadSingle(deviceName, reqs[0], reader)
-			if singleErr != nil {
-				// Errors are already logged inside handleReadSingle.
+			cv, err := connector.HandleReadSingle(reader, reqs[0])
+			if err != nil {
+				cd.lc.Errorf("@read failed: dev %s, res %s, err %v", deviceName, reqs[0].DeviceResourceName, err)
 				continue
 			}
 			res = append(res, cv)
 			cd.readCommandsExecuted.Inc(1)
+			cd.lc.Debugf("@read ok: dev %s, res %s, val %v ", deviceName, cv.DeviceResourceName, cv.Value)
 			continue
 		}
 
-		cvList, err := cd.handleReadBatch(deviceName, reqs, reader)
+		cvList, err := connector.HandleReadBatch(reader, reqs)
 		if err != nil {
-			continue
+			cd.lc.Errorf("@read batch failed: dev %s, err %v", deviceName, err)
 		}
 		res = append(res, cvList...)
 		cd.readCommandsExecuted.Inc(1)
-
+		cd.lc.Debugf("@read batch ok: dev %s ", deviceName)
 	}
 	return
 }
@@ -220,63 +221,6 @@ func (cd *CompositeDriver) Discover() {
 
 	time.Sleep(time.Duration(cd.serviceConfig.SimpleCustom.Writable.DiscoverSleepDurationSecs) * time.Second)
 	cd.deviceCh <- res
-}
-
-// handleReadSingle processes a single read command.
-func (cd *CompositeDriver) handleReadSingle(deviceName string, req sdkModels.CommandRequest, reader connector.ReadClient) (*sdkModels.CommandValue, error) {
-	res := protocol.NewResource(req)
-	var err error
-	if err = reader.ReadSingle(&res); err != nil {
-		cd.lc.Errorf("@read failed read: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
-		return nil, err
-	}
-
-	if res.Decoder != "" {
-		res.Value, err = parser.DecodeRawData(res.Decoder, res.Value)
-		if err != nil {
-			cd.lc.Errorf("@read failed parse: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
-			return nil, err
-		}
-	}
-
-	cv, err := sdkModels.NewCommandValue(req.DeviceResourceName, req.Type, res.Value)
-	if err != nil {
-		cd.lc.Errorf("@read failed cmdVal: dev %s, res %s, err %v", deviceName, req.DeviceResourceName, err)
-		return nil, err
-	}
-
-	cd.lc.Debugf("@read ok: dev %s, res %s, addr %v, len %d, val %v ", deviceName, res.Name, res.Address, res.Length, res.Value)
-	return cv, nil
-}
-
-// handleReadSingle processes a single read command.
-func (cd *CompositeDriver) handleReadBatch(deviceName string, req []sdkModels.CommandRequest, reader connector.ReadClient) ([]*sdkModels.CommandValue, error) {
-	resList := protocol.NewResourceN(req)
-	var err error
-	if err = reader.ReadBatch(resList); err != nil {
-		cd.lc.Errorf("@readBatch failed read: dev %s, err %v", deviceName, err)
-		return nil, err
-	}
-
-	cvList := make([]*sdkModels.CommandValue, 0, len(req))
-	for i := range resList {
-		if resList[i].Decoder != "" {
-			resList[i].Value, err = parser.DecodeRawData(resList[i].Decoder, resList[i].Value)
-			if err != nil {
-				cd.lc.Errorf("@read failed parse: dev %s, res %s, err %v", deviceName, req[i].DeviceResourceName, err)
-				continue
-			}
-		}
-
-		cv, err := sdkModels.NewCommandValue(req[i].DeviceResourceName, req[i].Type, resList[i].Value)
-		if err != nil {
-			cd.lc.Errorf("@read failed cmdVal: dev %s, res %s, err %v", deviceName, req[i].DeviceResourceName, err)
-			continue
-		}
-		cd.lc.Debugf("@read ok: dev %s, res %s, addr %v, len %d, val %v ", deviceName, resList[i].Name, resList[i].Address, resList[i].Length, resList[i].Value)
-		cvList = append(cvList, cv)
-	}
-	return cvList, nil
 }
 
 // processReceiveData reads from dataCh and pushes to EdgeX
@@ -375,9 +319,4 @@ func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
 	}
 	cd.lc.Infof("Registered %s metric", readCommandsExecutedName)
 	return nil
-}
-
-func isDisabled(props models.ProtocolProperties) bool {
-	v, ok := props["enabled"]
-	return ok && v == "false"
 }
