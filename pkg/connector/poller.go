@@ -132,13 +132,6 @@ func (p *Polls) newClient(endpoint string, protocolName protocol.ProtocolType, t
 }
 
 // newModbusClient constructs a ModbusClient from a generic args map.
-// Keys recognized in args:
-//
-//	"baud_rate"  uint  – serial baud rate (RTU only)
-//	"data_bits"  uint  – data bits        (RTU only, default 8)
-//	"stop_bits"  uint  – stop bits        (RTU only, default 1)
-//	"parity"     uint  – 0=None 1=Odd 2=Even (RTU only, default 0)
-//	"timeout"    time.Duration – overrides the pool-level timeout
 func newModbusClient(endpoint string, pt protocol.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
 	c := &poller.ModbusClient{
 		EndPoint:     endpoint,

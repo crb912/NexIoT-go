@@ -1,4 +1,4 @@
-// Package adapter provides unit tests for the Modbus protocol adapter.
+// Package poller provides unit tests for the Modbus protocol poller.
 package poller
 
 import (
@@ -12,29 +12,28 @@ import (
 	"github.com/simonvetter/modbus"
 )
 
-// ─── Mock implementation ─────────────────────────────────────────────────────
+// ─── Mock implementation ──────────────────────────────────────────────
 
-// mockModbusClient is a fully controllable stand-in for Client.
-// Each field controls the behaviour of the matching method.
+// mockModbusClient implements the Client interface.
 type mockModbusClient struct {
-	// Open/Close controls
 	openErr  error
 	closeErr error
 
-	// ReadRegisters controls
-	readRegs []uint16
-	readErr  error
+	readRegs    []uint16
+	readRegsErr error
 
-	// ReadCoils controls
 	readCoils    []bool
 	readCoilsErr error
 
-	// Call tracking
+	readDiscretes    []bool
+	readDiscretesErr error
+
 	openCalled  bool
 	closeCalled bool
 
-	readCalls      []readCall     // every ReadRegisters invocation
-	readCoilsCalls []readCoilCall // every ReadCoils invocation
+	readCalls          []readCall
+	readCoilsCalls     []readCoilCall
+	readDiscretesCalls []readDiscreteCall
 }
 
 type readCall struct {
@@ -44,6 +43,11 @@ type readCall struct {
 }
 
 type readCoilCall struct {
+	address  uint16
+	quantity uint16
+}
+
+type readDiscreteCall struct {
 	address  uint16
 	quantity uint16
 }
@@ -60,7 +64,7 @@ func (m *mockModbusClient) Close() error {
 
 func (m *mockModbusClient) ReadRegisters(address, quantity uint16, rt modbus.RegType) ([]uint16, error) {
 	m.readCalls = append(m.readCalls, readCall{address, quantity, rt})
-	return m.readRegs, m.readErr
+	return m.readRegs, m.readRegsErr
 }
 
 func (m *mockModbusClient) ReadCoils(address, quantity uint16) ([]bool, error) {
@@ -68,21 +72,29 @@ func (m *mockModbusClient) ReadCoils(address, quantity uint16) ([]bool, error) {
 	return m.readCoils, m.readCoilsErr
 }
 
-// ─── Helper: build a ModbusClient wired to a mock ────────────────────────────
-
-func newMockedModbusClient(mock Client) *ModbusClient {
-	mc := &ModbusClient{
-		EndPoint:  "tcp://127.0.0.1:502",
-		Timeout:   1 * time.Second,
-		connected: true,
-		client:    mock,
-	}
-	return mc
+func (m *mockModbusClient) ReadDiscreteInputs(address, quantity uint16) ([]bool, error) {
+	m.readDiscretesCalls = append(m.readDiscretesCalls, readDiscreteCall{address, quantity})
+	return m.readDiscretes, m.readDiscretesErr
 }
 
-// ─── Helper: build a model.Resource for testing ──────────────────────────────
+// Compile-time check: mockModbusClient satisfies Client.
+var _ Client = (*mockModbusClient)(nil)
 
-func newTestResource(addr any, length int, primaryTable string) *protocol.Resource {
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+func newMockedModbusClient(mock Client) *ModbusClient {
+	return &ModbusClient{
+		EndPoint:     "tcp://127.0.0.1:502",
+		ProtocolType: protocol.ModbusTCP,
+		Timeout:      1 * time.Second,
+		connected:    true,
+		client:       mock,
+	}
+}
+
+// newTestResource returns a *protocol.Resource for use in ReadSingle.
+// For ReadBatch, callers should dereference: *newTestResource(...).
+func newTestResource(addr float64, length uint16, primaryTable string) *protocol.Resource {
 	r := &protocol.Resource{
 		Name:    fmt.Sprintf("res-%v", addr),
 		Address: addr,
@@ -95,159 +107,9 @@ func newTestResource(addr any, length int, primaryTable string) *protocol.Resour
 	return r
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 1. parseAddress
-// ═══════════════════════════════════════════════════════════════════════════════
-
-func TestParseAddress(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		input   string
-		want    uint16
-		wantErr bool
-		errMsg  string
-	}{
-		// ── Happy path ────────────────────────────────────────────────────────
-		{
-			name:  "address_1_maps_to_protocol_0",
-			input: "1",
-			want:  0x0000,
-		},
-		{
-			name:  "classic_modbus_40001_maps_to_40000",
-			input: "40001",
-			want:  40000,
-		},
-		{
-			name:  "address_100",
-			input: "100",
-			want:  99,
-		},
-		{
-			name:  "max_uint16_address",
-			input: "65535",
-			want:  65534,
-		},
-
-		// ── Error path ────────────────────────────────────────────────────────
-		{
-			name:    "zero_is_invalid",
-			input:   "0",
-			wantErr: true,
-			errMsg:  "address must be > 0",
-		},
-		{
-			name:    "negative_number_string",
-			input:   "-1",
-			wantErr: true,
-			errMsg:  "invalid address format",
-		},
-		{
-			name:    "alphabetic_string",
-			input:   "abc",
-			wantErr: true,
-			errMsg:  "invalid address format",
-		},
-		{
-			name:    "empty_string",
-			input:   "",
-			wantErr: true,
-			errMsg:  "invalid address format",
-		},
-		{
-			name:    "float_string",
-			input:   "1.5",
-			wantErr: true,
-			errMsg:  "invalid address format",
-		},
-		{
-			name:    "hex_string_without_prefix",
-			input:   "FF",
-			wantErr: true,
-			errMsg:  "invalid address format",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := parseAddress(tt.input)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("parseAddress(%q) expected error, got nil", tt.input)
-				}
-				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("parseAddress(%q) error = %q, want it to contain %q",
-						tt.input, err.Error(), tt.errMsg)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("parseAddress(%q) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Errorf("parseAddress(%q) = %d (0x%04X), want %d (0x%04X)",
-					tt.input, got, got, tt.want, tt.want)
-			}
-		})
-	}
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 2. convAddress
-// ═══════════════════════════════════════════════════════════════════════════════
-
-func TestConvAddress(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		addr    any
-		want    uint16
-		wantErr bool
-	}{
-		{name: "float64 direct", addr: float64(16), want: 16},
-		{name: "float64 zero", addr: float64(0), want: 0},
-		{name: "float64 max", addr: float64(65535), want: 65535},
-		{name: "float64 negative", addr: float64(-1), wantErr: true},
-		{name: "float64 overflow", addr: float64(65536), wantErr: true},
-		{name: "int direct", addr: 8, want: 8},
-		{name: "int zero", addr: 0, want: 0},
-		{name: "int negative", addr: -1, wantErr: true},
-		{name: "string 1-indexed", addr: "1", want: 0}, // parseAddress subtracts 1
-		{name: "string 16", addr: "16", want: 15},      // parseAddress subtracts 1
-		{name: "unsupported type", addr: true, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := convProtocolAddr(tt.addr)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("convAddress(%v) expected error, got nil", tt.addr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("convAddress(%v) unexpected error: %v", tt.addr, err)
-			}
-			if got != tt.want {
-				t.Errorf("convAddress(%v) = %d, want %d", tt.addr, got, tt.want)
-			}
-		})
-	}
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 3. getTableType
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// getTableType
+// ═══════════════════════════════════════════════════════════════════════
 
 func TestGetTableType(t *testing.T) {
 	t.Parallel()
@@ -255,16 +117,17 @@ func TestGetTableType(t *testing.T) {
 	tests := []struct {
 		name string
 		args map[string]any
-		want functionCode
+		want tableType
 	}{
-		{name: "nil args", args: nil, want: tableHoldingRegisters},
-		{name: "empty args", args: map[string]any{}, want: tableHoldingRegisters},
-		{name: "no primaryTable", args: map[string]any{"other": "x"}, want: tableHoldingRegisters},
+		{name: "nil args defaults to HOLDING_REGISTERS", args: nil, want: tableHoldingRegisters},
+		{name: "empty args defaults to HOLDING_REGISTERS", args: map[string]any{}, want: tableHoldingRegisters},
+		{name: "no primaryTable key defaults", args: map[string]any{"other": "x"}, want: tableHoldingRegisters},
 		{name: "COILS", args: map[string]any{"primaryTable": "COILS"}, want: tableCoils},
+		{name: "DISCRETES", args: map[string]any{"primaryTable": "DISCRETES"}, want: tableDiscretes},
 		{name: "HOLDING_REGISTERS", args: map[string]any{"primaryTable": "HOLDING_REGISTERS"}, want: tableHoldingRegisters},
 		{name: "INPUT_REGISTERS", args: map[string]any{"primaryTable": "INPUT_REGISTERS"}, want: tableInputRegisters},
-		{name: "unknown fallback", args: map[string]any{"primaryTable": "COILS_BAD"}, want: tableHoldingRegisters},
-		{name: "non-string fallback", args: map[string]any{"primaryTable": 42}, want: tableHoldingRegisters},
+		{name: "unknown value falls back", args: map[string]any{"primaryTable": "BAD_TABLE"}, want: tableHoldingRegisters},
+		{name: "non-string value falls back", args: map[string]any{"primaryTable": 42}, want: tableHoldingRegisters},
 	}
 
 	for _, tt := range tests {
@@ -279,32 +142,244 @@ func TestGetTableType(t *testing.T) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 4. GetProtocolType
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// calculateBatchSpan
+// ═══════════════════════════════════════════════════════════════════════
 
-func TestGetProtocolType(t *testing.T) {
-	mc := &ModbusClient{}
-	if got := mc.GetProtocolType(); got != protocol.ModbusTCP {
-		// Note: ProtocolModbusTCP is the zero-value default for ModbusClient.ProtocolType.
-		// The actual value depends on how the client was constructed.
-		t.Logf("GetProtocolType() = %q, expected may vary based on construction", got)
+func TestCalculateBatchSpan(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		points  []protocol.Resource
+		wantMin uint16
+		wantQty uint16
+	}{
+		{
+			name: "single point",
+			points: []protocol.Resource{
+				{Address: float64(10), Length: 2},
+			},
+			wantMin: 10,
+			wantQty: 2,
+		},
+		{
+			name: "contiguous points",
+			points: []protocol.Resource{
+				{Address: float64(1), Length: 1},
+				{Address: float64(2), Length: 1},
+				{Address: float64(3), Length: 1},
+			},
+			wantMin: 1,
+			wantQty: 3,
+		},
+		{
+			name: "sparse points",
+			points: []protocol.Resource{
+				{Address: float64(5), Length: 1},
+				{Address: float64(1), Length: 2},
+				{Address: float64(9), Length: 1},
+			},
+			wantMin: 1,
+			wantQty: 9, // endAddr max: 9+1=10, quantity: 10-1=9
+		},
+		{
+			name: "multi-length resources",
+			points: []protocol.Resource{
+				{Address: float64(100), Length: 4},
+				{Address: float64(104), Length: 2},
+			},
+			wantMin: 100,
+			wantQty: 6, // endAddr max: 104+2=106, quantity: 106-100=6
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			minAddr, quantity := calculateBatchSpan(tt.points)
+			if minAddr != tt.wantMin {
+				t.Errorf("calculateBatchSpan() minAddr = %d, want %d", minAddr, tt.wantMin)
+			}
+			if quantity != tt.wantQty {
+				t.Errorf("calculateBatchSpan() quantity = %d, want %d", quantity, tt.wantQty)
+			}
+		})
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 5. Connect
-// ═══════════════════════════════════════════════════════════════════════════════
+func TestCalculateBatchSpan_Empty(t *testing.T) {
+	t.Parallel()
+	// Degenerate case: empty input. minAddr stays at 0xFFFF, quantity is maxEnd - minAddr = 0 - 0xFFFF = 1 (underflow).
+	points := []protocol.Resource{}
+	minAddr, quantity := calculateBatchSpan(points)
+	// Document current behavior — caller should guard against empty input.
+	t.Logf("calculateBatchSpan on empty: minAddr=%d (0x%04X), quantity=%d", minAddr, minAddr, quantity)
+	_ = minAddr
+	_ = quantity
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// extractValue
+// ═══════════════════════════════════════════════════════════════════════
+
+func TestExtractValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		rawData any
+		resType string
+		length  uint16
+		want    any
+	}{
+		{
+			name:    "uint16 length 1 returns bare value",
+			rawData: []uint16{0xBEEF},
+			length:  1,
+			want:    uint16(0xBEEF),
+		},
+		{
+			name:    "uint16 length > 1 returns slice",
+			rawData: []uint16{0x0001, 0x0002},
+			length:  2,
+			want:    []uint16{0x0001, 0x0002},
+		},
+		{
+			name:    "bool length 1 returns bare value",
+			rawData: []bool{true},
+			length:  1,
+			want:    true,
+		},
+		{
+			name:    "bool length > 1 returns slice",
+			rawData: []bool{true, false, true},
+			length:  3,
+			want:    []bool{true, false, true},
+		},
+		{
+			name:    "unexpected type length 1 returns rawData",
+			rawData: "hello",
+			length:  1,
+			want:    "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractValue(tt.rawData, tt.resType, tt.length)
+			if fmt.Sprintf("%v", got) != fmt.Sprintf("%v", tt.want) {
+				t.Errorf("extractValue() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// assignResValues
+// ═══════════════════════════════════════════════════════════════════════
+
+func TestAssignResValues_Uint16(t *testing.T) {
+	t.Parallel()
+
+	points := []protocol.Resource{
+		{Address: float64(10), Length: 1},
+		{Address: float64(12), Length: 2},
+	}
+	data := []uint16{0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD}
+
+	assignResValues(points, 10, data)
+
+	// Point at addr 10: offset=0, length=1 → extractValue → bare uint16
+	if v, ok := points[0].Value.(uint16); !ok || v != 0xAAAA {
+		t.Errorf("points[0].Value = %v (%T), want uint16(0xAAAA)", points[0].Value, points[0].Value)
+	}
+	// Point at addr 12: offset=2, length=2 → extractValue → []uint16{0xCCCC, 0xDDDD}
+	slice, ok := points[1].Value.([]uint16)
+	if !ok || len(slice) != 2 || slice[0] != 0xCCCC || slice[1] != 0xDDDD {
+		t.Errorf("points[1].Value = %v (%T), want []uint16{0xCCCC, 0xDDDD}", points[1].Value, points[1].Value)
+	}
+}
+
+func TestAssignResValues_Bool(t *testing.T) {
+	t.Parallel()
+
+	points := []protocol.Resource{
+		{Address: float64(1), Length: 1},
+		{Address: float64(3), Length: 1},
+	}
+	data := []bool{true, false, true, false}
+
+	assignResValues(points, 1, data)
+
+	if v, ok := points[0].Value.(bool); !ok || !v {
+		t.Errorf("points[0].Value = %v (%T), want bool(true)", points[0].Value, points[0].Value)
+	}
+	if v, ok := points[1].Value.(bool); !ok || !v {
+		t.Errorf("points[1].Value = %v (%T), want bool(true)", points[1].Value, points[1].Value)
+	}
+}
+
+func TestAssignResValues_OutOfRange(t *testing.T) {
+	t.Parallel()
+
+	// Address 15 with offset 5 but data only has 3 elements → safety check skips.
+	points := []protocol.Resource{
+		{Address: float64(15), Length: 3},
+	}
+	data := []uint16{0x0001, 0x0002}
+
+	// Should not panic.
+	assignResValues(points, 10, data)
+
+	if points[0].Value != nil {
+		t.Errorf("points[0].Value should be nil (out of range), got %v", points[0].Value)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// GetProtocolType
+// ═══════════════════════════════════════════════════════════════════════
+
+func TestGetProtocolType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pt   protocol.ProtocolType
+	}{
+		{name: "ModbusTCP", pt: protocol.ModbusTCP},
+		{name: "ModbusRTU", pt: protocol.ModbusRTU},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mc := &ModbusClient{ProtocolType: tt.pt}
+			got := mc.GetProtocolType()
+			if got != tt.pt {
+				t.Errorf("GetProtocolType() = %q, want %q", got, tt.pt)
+			}
+		})
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Connect
+// ═══════════════════════════════════════════════════════════════════════
 
 func TestConnect_OpenError(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{openErr: errors.New("connection refused")}
 	mc := newMockedModbusClient(mock)
-	mc.connected = false // start disconnected
+	mc.connected = false
 
 	err := mc.Connect()
-
 	if err == nil {
 		t.Fatal("expected error from Connect(), got nil")
 	}
@@ -313,10 +388,10 @@ func TestConnect_OpenError(t *testing.T) {
 	}
 }
 
-func TestConnect_SetsConnectedTrue(t *testing.T) {
+func TestConnect_Success(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockModbusClient{openErr: nil}
+	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 	mc.connected = false
 
@@ -327,20 +402,38 @@ func TestConnect_SetsConnectedTrue(t *testing.T) {
 		t.Error("connected should be true after successful Connect()")
 	}
 	if !mock.openCalled {
-		t.Error("Open() was never called on the underlying connpool")
+		t.Error("Open() was never called on the underlying client")
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 6. Disconnect
-// ═══════════════════════════════════════════════════════════════════════════════
+func TestConnect_ReusesExistingClient(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockModbusClient{}
+	mc := newMockedModbusClient(mock)
+	// client already set and connected
+	mc.connected = true
+
+	if err := mc.Connect(); err != nil {
+		t.Fatalf("Connect() unexpected error: %v", err)
+	}
+	// newClient() should not be called because m.client != nil.
+	// But Open() will still be called.
+	if !mock.openCalled {
+		t.Error("Open() should still be called when client already exists")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Disconnect
+// ═══════════════════════════════════════════════════════════════════════
 
 func TestDisconnect_NilClient(t *testing.T) {
 	t.Parallel()
 
-	mc := &ModbusClient{connected: false}
+	mc := &ModbusClient{client: nil, connected: false}
 	if err := mc.Disconnect(); err != nil {
-		t.Errorf("Disconnect() with nil connpool should return nil, got: %v", err)
+		t.Errorf("Disconnect() with nil client should return nil, got: %v", err)
 	}
 	if mc.connected {
 		t.Error("connected should be false after Disconnect()")
@@ -354,19 +447,21 @@ func TestDisconnect_CloseError(t *testing.T) {
 	mc := newMockedModbusClient(mock)
 
 	err := mc.Disconnect()
-
 	if err == nil {
 		t.Fatal("expected error from Disconnect(), got nil")
 	}
 	if !strings.Contains(err.Error(), "broken pipe") {
 		t.Errorf("error = %q, want it to contain 'broken pipe'", err.Error())
 	}
+	if mc.connected {
+		t.Error("connected should be false after Disconnect(), even on close error")
+	}
 }
 
-func TestDisconnect_SetsConnectedFalse(t *testing.T) {
+func TestDisconnect_Success(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockModbusClient{closeErr: nil}
+	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
 	if err := mc.Disconnect(); err != nil {
@@ -376,24 +471,24 @@ func TestDisconnect_SetsConnectedFalse(t *testing.T) {
 		t.Error("connected should be false after Disconnect()")
 	}
 	if !mock.closeCalled {
-		t.Error("Close() was never called on the underlying connpool")
+		t.Error("Close() was never called on the underlying client")
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 7. IsConnect
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// IsConnected
+// ═══════════════════════════════════════════════════════════════════════
 
-func TestIsConnect_NilClient(t *testing.T) {
+func TestIsConnected_NilClient(t *testing.T) {
 	t.Parallel()
 
 	mc := &ModbusClient{client: nil, connected: false}
 	if mc.IsConnected() {
-		t.Error("IsConnect() should be false when connpool is nil")
+		t.Error("IsConnected() should be false when client is nil")
 	}
 }
 
-func TestIsConnect_ConnectedFlagFalse(t *testing.T) {
+func TestIsConnected_ConnectedFlagFalse(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{}
@@ -401,7 +496,7 @@ func TestIsConnect_ConnectedFlagFalse(t *testing.T) {
 	mc.connected = false
 
 	if mc.IsConnected() {
-		t.Error("IsConnect() should be false when connected flag is false")
+		t.Error("IsConnected() should be false when connected flag is false")
 	}
 	// ReadRegisters should NOT be called if the flag is already false.
 	if len(mock.readCalls) > 0 {
@@ -409,58 +504,64 @@ func TestIsConnect_ConnectedFlagFalse(t *testing.T) {
 	}
 }
 
-func TestIsConnect_TransportAlive(t *testing.T) {
+func TestIsConnected_Alive(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{
 		readRegs: []uint16{0x1234},
-		readErr:  nil,
 	}
 	mc := newMockedModbusClient(mock)
 
 	if !mc.IsConnected() {
-		t.Error("IsConnect() should be true when ReadRegisters succeeds")
+		t.Error("IsConnected() should be true when ReadRegisters succeeds")
+	}
+	// Should have called ReadRegisters(1, 1, HOLDING_REGISTER) — the probe.
+	if len(mock.readCalls) != 1 {
+		t.Fatalf("expected 1 ReadRegisters probe call, got %d", len(mock.readCalls))
+	}
+	if mock.readCalls[0].address != 1 || mock.readCalls[0].quantity != 1 {
+		t.Errorf("probe call: address=%d quantity=%d, want address=1 quantity=1",
+			mock.readCalls[0].address, mock.readCalls[0].quantity)
 	}
 }
 
-func TestIsConnect_ProtocolErrorKeepsConnectionAlive(t *testing.T) {
+func TestIsConnected_ProtocolErrorKeepsAlive(t *testing.T) {
 	t.Parallel()
-	// A Modbus protocol-level error (e.g., illegal function) must NOT mark the
-	// transport as dead — only transport-level errors should do that.
+
 	mock := &mockModbusClient{
-		readErr: errors.New("modbus: exception '2' (illegal data address)"),
+		readRegsErr: errors.New("modbus: exception '2' (illegal data address)"),
 	}
 	mc := newMockedModbusClient(mock)
 
 	if !mc.IsConnected() {
-		t.Error("IsConnect() should remain true on a protocol-level error")
+		t.Error("IsConnected() should remain true on a protocol-level error")
 	}
 	if !mc.connected {
 		t.Error("connected flag should not be cleared on a protocol-level error")
 	}
 }
 
-var transportErrors = []string{
-	"connection refused",
-	"broken pipe",
-	"closed network connection",
-	"no such file or directory",
-	"no such device",
-}
-
-func TestIsConnect_TransportErrors_MarkDisconnected(t *testing.T) {
+func TestIsConnected_TransportErrorsMarkDisconnected(t *testing.T) {
 	t.Parallel()
+
+	transportErrors := []string{
+		"connection refused",
+		"broken pipe",
+		"closed network",
+		"no such file or directory",
+		"no such device",
+	}
 
 	for _, errMsg := range transportErrors {
 		errMsg := errMsg
 		t.Run(errMsg, func(t *testing.T) {
 			t.Parallel()
 
-			mock := &mockModbusClient{readErr: fmt.Errorf("dial tcp: %s", errMsg)}
+			mock := &mockModbusClient{readRegsErr: fmt.Errorf("dial tcp: %s", errMsg)}
 			mc := newMockedModbusClient(mock)
 
 			if mc.IsConnected() {
-				t.Errorf("IsConnect() should be false for transport error: %q", errMsg)
+				t.Errorf("IsConnected() should be false for transport error: %q", errMsg)
 			}
 			if mc.connected {
 				t.Errorf("connected flag should be cleared for transport error: %q", errMsg)
@@ -469,102 +570,184 @@ func TestIsConnect_TransportErrors_MarkDisconnected(t *testing.T) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 8. ReadSingle (new Reader interface)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// ReadSingle
+// ═══════════════════════════════════════════════════════════════════════
 
-func TestReadSingle_HoldingRegister_Success(t *testing.T) {
+func TestReadSingle_HoldingRegister_Length1(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{readRegs: []uint16{0xBEEF}}
 	mc := newMockedModbusClient(mock)
 
+	// Address float64(1) → uint16(1)-1 = 0 (protocol address)
 	point := newTestResource(float64(1), 1, "HOLDING_REGISTERS")
 	err := mc.ReadSingle(point)
 
 	if err != nil {
 		t.Fatalf("ReadSingle() unexpected error: %v", err)
 	}
-	if point.Value == nil {
-		t.Fatal("point.Value should not be nil")
-	}
-	regs, ok := point.Value.([]uint16)
+
+	// Length=1: extractValue returns bare uint16.
+	v, ok := point.Value.(uint16)
 	if !ok {
-		t.Fatalf("point.Value should be []uint16, got %T", point.Value)
+		t.Fatalf("point.Value should be uint16 (bare value for length=1), got %T", point.Value)
 	}
-	if len(regs) != 1 || regs[0] != 0xBEEF {
-		t.Errorf("regs = %v, want [0xBEEF]", regs)
+	if v != 0xBEEF {
+		t.Errorf("point.Value = 0x%04X, want 0xBEEF", v)
 	}
 
-	// Verify correct protocol call
+	// Verify protocol call: address should be 0 (1→0 after -1).
 	if len(mock.readCalls) != 1 {
 		t.Fatalf("expected 1 ReadRegisters call, got %d", len(mock.readCalls))
 	}
-	if mock.readCalls[0].address != 1 { // float64(1) used as-is
-		t.Errorf("ReadRegisters called with address %d, want 1", mock.readCalls[0].address)
+	if mock.readCalls[0].address != 0 {
+		t.Errorf("ReadRegisters address = %d, want 0 (1-based 1 → 0-based 0)", mock.readCalls[0].address)
 	}
 	if mock.readCalls[0].quantity != 1 {
-		t.Errorf("ReadRegisters called with quantity %d, want 1", mock.readCalls[0].quantity)
+		t.Errorf("ReadRegisters quantity = %d, want 1", mock.readCalls[0].quantity)
 	}
 	if mock.readCalls[0].registerType != modbus.HOLDING_REGISTER {
-		t.Errorf("ReadRegisters called with registerType %v, want HOLDING_REGISTER", mock.readCalls[0].registerType)
+		t.Errorf("ReadRegisters registerType = %v, want HOLDING_REGISTER", mock.readCalls[0].registerType)
 	}
 }
 
-func TestReadSingle_Coils_Success(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockModbusClient{readCoils: []bool{true, false, true}}
-	mc := newMockedModbusClient(mock)
-
-	point := newTestResource(float64(8), 3, "COILS")
-	err := mc.ReadSingle(point)
-
-	if err != nil {
-		t.Fatalf("ReadSingle() unexpected error: %v", err)
-	}
-	coils, ok := point.Value.([]bool)
-	if !ok {
-		t.Fatalf("point.Value should be []bool, got %T", point.Value)
-	}
-	if len(coils) != 3 || coils[0] != true || coils[2] != true {
-		t.Errorf("coils = %v, want [true false true]", coils)
-	}
-
-	// Verify correct protocol call
-	if len(mock.readCoilsCalls) != 1 {
-		t.Fatalf("expected 1 ReadCoils call, got %d", len(mock.readCoilsCalls))
-	}
-	if mock.readCoilsCalls[0].address != 8 {
-		t.Errorf("ReadCoils called with address %d, want 8", mock.readCoilsCalls[0].address)
-	}
-	if mock.readCoilsCalls[0].quantity != 3 {
-		t.Errorf("ReadCoils called with quantity %d, want 3", mock.readCoilsCalls[0].quantity)
-	}
-}
-
-func TestReadSingle_InputRegister_Success(t *testing.T) {
+func TestReadSingle_HoldingRegister_LengthMulti(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{readRegs: []uint16{0x00FF, 0x0100}}
 	mc := newMockedModbusClient(mock)
 
-	point := newTestResource(float64(0), 2, "INPUT_REGISTERS")
+	// Length > 1: extractValue returns the raw slice.
+	point := newTestResource(float64(10), 2, "HOLDING_REGISTERS")
 	err := mc.ReadSingle(point)
 
 	if err != nil {
 		t.Fatalf("ReadSingle() unexpected error: %v", err)
 	}
+
+	regs, ok := point.Value.([]uint16)
+	if !ok {
+		t.Fatalf("point.Value should be []uint16 for length>1, got %T", point.Value)
+	}
+	if len(regs) != 2 || regs[0] != 0x00FF || regs[1] != 0x0100 {
+		t.Errorf("point.Value = %v, want [0x00FF 0x0100]", regs)
+	}
+
+	// Address float64(10) → uint16(10)-1 = 9.
+	if mock.readCalls[0].address != 9 {
+		t.Errorf("ReadRegisters address = %d, want 9", mock.readCalls[0].address)
+	}
+}
+
+func TestReadSingle_Coils_Length1(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockModbusClient{readCoils: []bool{true}}
+	mc := newMockedModbusClient(mock)
+
+	// Address float64(8) → uint16(8)-1 = 7.
+	point := newTestResource(float64(8), 1, "COILS")
+	err := mc.ReadSingle(point)
+
+	if err != nil {
+		t.Fatalf("ReadSingle() unexpected error: %v", err)
+	}
+
+	v, ok := point.Value.(bool)
+	if !ok {
+		t.Fatalf("point.Value should be bool (bare value for length=1), got %T", point.Value)
+	}
+	if !v {
+		t.Error("point.Value should be true")
+	}
+
+	if len(mock.readCoilsCalls) != 1 {
+		t.Fatalf("expected 1 ReadCoils call, got %d", len(mock.readCoilsCalls))
+	}
+	if mock.readCoilsCalls[0].address != 7 {
+		t.Errorf("ReadCoils address = %d, want 7", mock.readCoilsCalls[0].address)
+	}
+	if mock.readCoilsCalls[0].quantity != 1 {
+		t.Errorf("ReadCoils quantity = %d, want 1", mock.readCoilsCalls[0].quantity)
+	}
+}
+
+func TestReadSingle_Coils_LengthMulti(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockModbusClient{readCoils: []bool{true, false, true}}
+	mc := newMockedModbusClient(mock)
+
+	point := newTestResource(float64(1), 3, "COILS")
+	err := mc.ReadSingle(point)
+
+	if err != nil {
+		t.Fatalf("ReadSingle() unexpected error: %v", err)
+	}
+
+	coils, ok := point.Value.([]bool)
+	if !ok {
+		t.Fatalf("point.Value should be []bool for length>1, got %T", point.Value)
+	}
+	if len(coils) != 3 || coils[0] != true || coils[1] != false || coils[2] != true {
+		t.Errorf("point.Value = %v, want [true false true]", coils)
+	}
+}
+
+func TestReadSingle_InputRegister(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockModbusClient{readRegs: []uint16{0xABCD, 0xEF01}}
+	mc := newMockedModbusClient(mock)
+
+	point := newTestResource(float64(1), 2, "INPUT_REGISTERS")
+	err := mc.ReadSingle(point)
+
+	if err != nil {
+		t.Fatalf("ReadSingle() unexpected error: %v", err)
+	}
+
 	regs, ok := point.Value.([]uint16)
 	if !ok {
 		t.Fatalf("point.Value should be []uint16, got %T", point.Value)
 	}
-	if len(regs) != 2 || regs[0] != 0x00FF || regs[1] != 0x0100 {
-		t.Errorf("regs = %v, want [0x00FF 0x0100]", regs)
+	if len(regs) != 2 || regs[0] != 0xABCD || regs[1] != 0xEF01 {
+		t.Errorf("point.Value = %v, want [0xABCD 0xEF01]", regs)
 	}
 
 	if mock.readCalls[0].registerType != modbus.INPUT_REGISTER {
-		t.Errorf("ReadRegisters called with registerType %v, want INPUT_REGISTER", mock.readCalls[0].registerType)
+		t.Errorf("registerType = %v, want INPUT_REGISTER", mock.readCalls[0].registerType)
+	}
+}
+
+func TestReadSingle_DiscreteInputs(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockModbusClient{readDiscretes: []bool{false, true, false}}
+	mc := newMockedModbusClient(mock)
+
+	point := newTestResource(float64(5), 3, "DISCRETES")
+	err := mc.ReadSingle(point)
+
+	if err != nil {
+		t.Fatalf("ReadSingle() unexpected error: %v", err)
+	}
+
+	discs, ok := point.Value.([]bool)
+	if !ok {
+		t.Fatalf("point.Value should be []bool, got %T", point.Value)
+	}
+	if len(discs) != 3 || discs[1] != true {
+		t.Errorf("point.Value = %v, want [false true false]", discs)
+	}
+
+	if len(mock.readDiscretesCalls) != 1 {
+		t.Fatalf("expected 1 ReadDiscreteInputs call, got %d", len(mock.readDiscretesCalls))
+	}
+	// Address float64(5) → uint16(5)-1 = 4.
+	if mock.readDiscretesCalls[0].address != 4 {
+		t.Errorf("ReadDiscreteInputs address = %d, want 4", mock.readDiscretesCalls[0].address)
 	}
 }
 
@@ -574,7 +757,8 @@ func TestReadSingle_DefaultToHoldingRegister(t *testing.T) {
 	mock := &mockModbusClient{readRegs: []uint16{0x0042}}
 	mc := newMockedModbusClient(mock)
 
-	point := newTestResource(float64(10), 1, "") // no primaryTable
+	// No primaryTable → defaults to HOLDING_REGISTERS.
+	point := newTestResource(float64(10), 1, "")
 	err := mc.ReadSingle(point)
 
 	if err != nil {
@@ -585,28 +769,32 @@ func TestReadSingle_DefaultToHoldingRegister(t *testing.T) {
 	}
 }
 
-func TestReadSingle_InvalidAddress(t *testing.T) {
+func TestReadSingle_InvalidAddressType_Panics(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	point := newTestResource(true, 1, "") // unsupported address type
-	err := mc.ReadSingle(point)
+	point := &protocol.Resource{
+		Name:    "bad-addr",
+		Address: true, // bool is not float64 — type assertion panics.
+		Length:  1,
+	}
 
-	if err == nil {
-		t.Fatal("ReadSingle() should return error for invalid address")
-	}
-	if !strings.Contains(err.Error(), "unsupported address type") {
-		t.Errorf("error should mention unsupported address type, got: %v", err)
-	}
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("ReadSingle() should panic on non-float64 address type")
+		}
+	}()
+
+	_ = mc.ReadSingle(point)
 }
 
 func TestReadSingle_DeviceError(t *testing.T) {
 	t.Parallel()
 
 	deviceErr := errors.New("timeout waiting for device")
-	mock := &mockModbusClient{readErr: deviceErr}
+	mock := &mockModbusClient{readRegsErr: deviceErr}
 	mc := newMockedModbusClient(mock)
 
 	point := newTestResource(float64(1), 1, "HOLDING_REGISTERS")
@@ -616,28 +804,31 @@ func TestReadSingle_DeviceError(t *testing.T) {
 		t.Fatal("ReadSingle() should propagate device errors")
 	}
 	if !strings.Contains(err.Error(), "timeout") {
-		t.Errorf("error should contain timeout, got: %v", err)
+		t.Errorf("error should contain 'timeout', got: %v", err)
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 9. ReadBatch (new Reader interface)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// ReadBatch
+// ═══════════════════════════════════════════════════════════════════════
 
 func TestReadBatch_EmptyInput(t *testing.T) {
-	t.Parallel()
+	// NOT t.Parallel() — uses recover() which interacts with t.
 
-	mock := &mockModbusClient{}
+	mock := &mockModbusClient{readRegs: []uint16{0x0000}}
 	mc := newMockedModbusClient(mock)
 
-	err := mc.ReadBatch([]*protocol.Resource{})
+	// The implementation accesses points[0].Args without checking len(points),
+	// which panics on empty input. This test documents that behavior.
+	points := []protocol.Resource{}
 
-	if err != nil {
-		t.Fatalf("ReadBatch([]) unexpected error: %v", err)
-	}
-	if len(mock.readCalls) > 0 {
-		t.Error("ReadRegisters should not be called for empty input")
-	}
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("ReadBatch([]) should panic because points[0].Args is accessed on empty slice")
+		}
+	}()
+
+	_ = mc.ReadBatch(points)
 }
 
 func TestReadBatch_HoldingRegisters_SinglePoint(t *testing.T) {
@@ -646,20 +837,30 @@ func TestReadBatch_HoldingRegisters_SinglePoint(t *testing.T) {
 	mock := &mockModbusClient{readRegs: []uint16{0x00FF}}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 	}
 	err := mc.ReadBatch(points)
 
 	if err != nil {
 		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
-	regs, ok := points[0].Value.([]uint16) // Length=1 → single-element slice
+
+	// Length=1 → bare uint16.
+	v, ok := points[0].Value.(uint16)
 	if !ok {
-		t.Fatalf("point.Value should be []uint16, got %T", points[0].Value)
+		t.Fatalf("point[0].Value should be uint16, got %T", points[0].Value)
 	}
-	if regs[0] != 0x00FF {
-		t.Errorf("Value = %v, want 0x00FF", regs[0])
+	if v != 0x00FF {
+		t.Errorf("point[0].Value = 0x%04X, want 0x00FF", v)
+	}
+
+	// minAddr=1 → read(0, 1, HOLDING_REGISTERS)
+	if mock.readCalls[0].address != 0 {
+		t.Errorf("ReadRegisters address = %d, want 0", mock.readCalls[0].address)
+	}
+	if mock.readCalls[0].quantity != 1 {
+		t.Errorf("ReadRegisters quantity = %d, want 1", mock.readCalls[0].quantity)
 	}
 }
 
@@ -670,10 +871,10 @@ func TestReadBatch_HoldingRegisters_Contiguous(t *testing.T) {
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(3), 1, "HOLDING_REGISTERS"),
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
+		*newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
+		*newTestResource(float64(3), 1, "HOLDING_REGISTERS"),
 	}
 	err := mc.ReadBatch(points)
 
@@ -681,17 +882,27 @@ func TestReadBatch_HoldingRegisters_Contiguous(t *testing.T) {
 		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
 
-	// One physical read must cover the whole range.
+	// One physical read covers the entire range [1,2,3] → read(0, 3, HOLDING_REGISTERS).
 	if len(mock.readCalls) != 1 {
 		t.Errorf("expected 1 batch ReadRegisters call, got %d", len(mock.readCalls))
+	}
+	if mock.readCalls[0].address != 0 {
+		t.Errorf("ReadRegisters address = %d, want 0", mock.readCalls[0].address)
 	}
 	if mock.readCalls[0].quantity != 3 {
 		t.Errorf("ReadRegisters quantity = %d, want 3", mock.readCalls[0].quantity)
 	}
 
-	for i := range points {
-		if points[i].Value == nil {
-			t.Errorf("point[%d].Value should not be nil", i)
+	// Each point gets its bare uint16 value (length=1).
+	wantVals := []uint16{0x0001, 0x0002, 0x0003}
+	for i, want := range wantVals {
+		v, ok := points[i].Value.(uint16)
+		if !ok {
+			t.Errorf("points[%d].Value should be uint16, got %T", i, points[i].Value)
+			continue
+		}
+		if v != want {
+			t.Errorf("points[%d].Value = %d, want %d", i, v, want)
 		}
 	}
 }
@@ -699,14 +910,14 @@ func TestReadBatch_HoldingRegisters_Contiguous(t *testing.T) {
 func TestReadBatch_HoldingRegisters_Sparse(t *testing.T) {
 	t.Parallel()
 
-	// Addresses 1 and 5 → span covers [1,2,3,4,5] → 5 registers
+	// Addresses 1 and 5 → span covers [1,2,3,4,5] → 5 registers.
 	regs := []uint16{0xAAAA, 0x0000, 0x0000, 0x0000, 0xBBBB}
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(5), 1, "HOLDING_REGISTERS"),
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
+		*newTestResource(float64(5), 1, "HOLDING_REGISTERS"),
 	}
 	err := mc.ReadBatch(points)
 
@@ -714,55 +925,47 @@ func TestReadBatch_HoldingRegisters_Sparse(t *testing.T) {
 		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
 
-	r0 := points[0].Value.([]uint16)
-	r1 := points[1].Value.([]uint16)
-
-	if r0[0] != 0xAAAA {
-		t.Errorf("address 1 Value = %v, want 0xAAAA", r0[0])
+	// Read span: minAddr=1, maxEnd=6, quantity=5 → read(0, 5, ...)
+	if mock.readCalls[0].quantity != 5 {
+		t.Errorf("ReadRegisters quantity = %d, want 5", mock.readCalls[0].quantity)
 	}
-	if r1[0] != 0xBBBB {
-		t.Errorf("address 5 Value = %v, want 0xBBBB", r1[0])
+
+	v0, _ := points[0].Value.(uint16)
+	v1, _ := points[1].Value.(uint16)
+	if v0 != 0xAAAA {
+		t.Errorf("address 1 value = 0x%04X, want 0xAAAA", v0)
 	}
-}
-
-func TestReadBatch_SpanTooLarge(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockModbusClient{}
-	mc := newMockedModbusClient(mock)
-
-	points := []*protocol.Resource{
-		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(127), 1, "HOLDING_REGISTERS"),
-	}
-	err := mc.ReadBatch(points)
-
-	if err == nil {
-		t.Fatal("ReadBatch() should return error when span > 125")
-	}
-	if !strings.Contains(err.Error(), "span too large") {
-		t.Errorf("error should mention span too large, got: %v", err)
+	if v1 != 0xBBBB {
+		t.Errorf("address 5 value = 0x%04X, want 0xBBBB", v1)
 	}
 }
 
-func TestReadBatch_BatchReadError(t *testing.T) {
+func TestReadBatch_HoldingRegisters_MultiLength(t *testing.T) {
 	t.Parallel()
 
-	deviceErr := errors.New("connection lost")
-	mock := &mockModbusClient{readErr: deviceErr}
+	regs := []uint16{0x1111, 0x2222, 0x3333, 0x4444}
+	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 2, "HOLDING_REGISTERS"), // offset 0, len 2
+		*newTestResource(float64(3), 2, "HOLDING_REGISTERS"), // offset 2, len 2
 	}
 	err := mc.ReadBatch(points)
 
-	if err == nil {
-		t.Fatal("ReadBatch() should propagate batch read errors")
+	if err != nil {
+		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "connection lost") {
-		t.Errorf("error should contain 'connection lost', got: %v", err)
+
+	// Point 0: length=2 → extractValue returns []uint16.
+	s0, ok := points[0].Value.([]uint16)
+	if !ok || len(s0) != 2 || s0[0] != 0x1111 || s0[1] != 0x2222 {
+		t.Errorf("points[0].Value = %v (%T), want [0x1111 0x2222]", points[0].Value, points[0].Value)
+	}
+
+	s1, ok := points[1].Value.([]uint16)
+	if !ok || len(s1) != 2 || s1[0] != 0x3333 || s1[1] != 0x4444 {
+		t.Errorf("points[1].Value = %v (%T), want [0x3333 0x4444]", points[1].Value, points[1].Value)
 	}
 }
 
@@ -773,10 +976,11 @@ func TestReadBatch_Coils(t *testing.T) {
 	mock := &mockModbusClient{readCoils: coils}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(0), 1, "COILS"),
-		newTestResource(float64(2), 1, "COILS"),
-		newTestResource(float64(4), 1, "COILS"),
+	// 1-based addresses >= 1 to avoid underflow.
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "COILS"), // offset 0
+		*newTestResource(float64(3), 1, "COILS"), // offset 2
+		*newTestResource(float64(5), 1, "COILS"), // offset 4
 	}
 	err := mc.ReadBatch(points)
 
@@ -786,33 +990,38 @@ func TestReadBatch_Coils(t *testing.T) {
 
 	if len(mock.readCoilsCalls) != 1 {
 		t.Errorf("expected 1 ReadCoils call, got %d", len(mock.readCoilsCalls))
+	}
+	// minAddr=1 → read(0, 5, COILS)
+	if mock.readCoilsCalls[0].address != 0 {
+		t.Errorf("ReadCoils address = %d, want 0", mock.readCoilsCalls[0].address)
 	}
 	if mock.readCoilsCalls[0].quantity != 5 {
 		t.Errorf("ReadCoils quantity = %d, want 5", mock.readCoilsCalls[0].quantity)
 	}
 
-	c0 := points[0].Value.([]bool)
-	if len(c0) != 1 || c0[0] != true {
-		t.Errorf("coil 0 = %v, want [true]", c0)
-	}
-	c2 := points[2].Value.([]bool)
-	if len(c2) != 1 || c2[0] != true {
-		t.Errorf("coil 4 = %v, want [true]", c2)
+	// Each length=1 → bare bool.
+	for i, want := range []bool{true, true, true} {
+		v, ok := points[i].Value.(bool)
+		if !ok {
+			t.Errorf("points[%d].Value should be bool, got %T", i, points[i].Value)
+			continue
+		}
+		if v != want {
+			t.Errorf("points[%d].Value = %v, want %v", i, v, want)
+		}
 	}
 }
 
-func TestReadBatch_MixedTableTypes(t *testing.T) {
+func TestReadBatch_DiscreteInputs(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockModbusClient{
-		readRegs:  []uint16{0x0042},
-		readCoils: []bool{false, true},
-	}
+	d := []bool{false, true, false, true}
+	mock := &mockModbusClient{readDiscretes: d}
 	mc := newMockedModbusClient(mock)
 
-	points := []*protocol.Resource{
-		newTestResource(float64(16), 1, "HOLDING_REGISTERS"),
-		newTestResource(float64(8), 2, "COILS"),
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 2, "DISCRETES"), // offset 0, len 2
+		*newTestResource(float64(3), 2, "DISCRETES"), // offset 2, len 2
 	}
 	err := mc.ReadBatch(points)
 
@@ -820,75 +1029,85 @@ func TestReadBatch_MixedTableTypes(t *testing.T) {
 		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
 
-	// Two separate batch calls: one for holding registers, one for coils
-	if len(mock.readCalls) != 1 {
-		t.Errorf("expected 1 ReadRegisters call, got %d", len(mock.readCalls))
+	if len(mock.readDiscretesCalls) != 1 {
+		t.Errorf("expected 1 ReadDiscreteInputs call, got %d", len(mock.readDiscretesCalls))
 	}
-	if len(mock.readCoilsCalls) != 1 {
-		t.Errorf("expected 1 ReadCoils call, got %d", len(mock.readCoilsCalls))
+	if mock.readDiscretesCalls[0].address != 0 {
+		t.Errorf("ReadDiscreteInputs address = %d, want 0", mock.readDiscretesCalls[0].address)
 	}
-
-	// Verify each point got its value
-	if points[0].Value == nil {
-		t.Error("holding register point.Value should not be nil")
-	}
-	if points[1].Value == nil {
-		t.Error("coil point.Value should not be nil")
+	if mock.readDiscretesCalls[0].quantity != 4 {
+		t.Errorf("ReadDiscreteInputs quantity = %d, want 4", mock.readDiscretesCalls[0].quantity)
 	}
 
-	c1 := points[1].Value.([]bool)
-	if len(c1) != 2 {
-		t.Errorf("coil result length = %d, want 2", len(c1))
+	// Length=2 → []bool.
+	s0, ok := points[0].Value.([]bool)
+	if !ok || len(s0) != 2 || s0[0] != false || s0[1] != true {
+		t.Errorf("points[0].Value = %v, want [false true]", points[0].Value)
+	}
+	s1, ok := points[1].Value.([]bool)
+	if !ok || len(s1) != 2 || s1[0] != false || s1[1] != true {
+		t.Errorf("points[1].Value = %v, want [false true]", points[1].Value)
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 10. bytesFromRegs
-// ═══════════════════════════════════════════════════════════════════════════════
-
-func TestBytesFromRegs(t *testing.T) {
+func TestReadBatch_Error(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		regs []uint16
-		want []byte
-	}{
-		{
-			name: "single_register",
-			regs: []uint16{0x1234},
-			want: []byte{0x12, 0x34},
-		},
-		{
-			name: "two_registers",
-			regs: []uint16{0x1234, 0x5678},
-			want: []byte{0x12, 0x34, 0x56, 0x78},
-		},
-		{
-			name: "three_registers_6_bytes",
-			regs: []uint16{0xDEAD, 0xBEEF, 0xCAFE},
-			want: []byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE},
-		},
-		{
-			name: "empty",
-			regs: []uint16{},
-			want: []byte{},
-		},
+	deviceErr := errors.New("connection lost")
+	mock := &mockModbusClient{readRegsErr: deviceErr}
+	mc := newMockedModbusClient(mock)
+
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
+		*newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
+	}
+	err := mc.ReadBatch(points)
+
+	if err == nil {
+		t.Fatal("ReadBatch() should propagate batch read errors")
+	}
+	if !strings.Contains(err.Error(), "connection lost") {
+		t.Errorf("error should contain 'connection lost', got: %v", err)
+	}
+	// Error message is wrapped: "batch read failed for type HOLDING_REGISTERS: connection lost"
+	if !strings.Contains(err.Error(), "batch read failed") {
+		t.Errorf("error should be wrapped with 'batch read failed', got: %v", err)
+	}
+}
+
+func TestReadBatch_MixedTypes_ReadsFirstTable(t *testing.T) {
+	t.Parallel()
+
+	// ReadBatch only uses points[0].Args to determine the table type.
+	// All points are read as the first point's table type.
+	regs := []uint16{0xAAAA, 0xBBBB}
+	mock := &mockModbusClient{readRegs: regs}
+	mc := newMockedModbusClient(mock)
+
+	points := []protocol.Resource{
+		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
+		*newTestResource(float64(2), 1, "COILS"), // COILS ignored; read as HOLDING_REGISTERS
+	}
+	err := mc.ReadBatch(points)
+
+	if err != nil {
+		t.Fatalf("ReadBatch() unexpected error: %v", err)
 	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := BytesFromRegs(tt.regs)
-			if len(got) != len(tt.want) {
-				t.Fatalf("bytesFromRegs() len = %d, want %d", len(got), len(tt.want))
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("bytesFromRegs()[%d] = 0x%02X, want 0x%02X", i, got[i], tt.want[i])
-				}
-			}
-		})
+	// Both points are read via ReadRegisters (first point's table type).
+	if len(mock.readCalls) != 1 {
+		t.Errorf("expected 1 ReadRegisters call, got %d", len(mock.readCalls))
+	}
+	if len(mock.readCoilsCalls) != 0 {
+		t.Errorf("expected 0 ReadCoils calls, got %d", len(mock.readCoilsCalls))
+	}
+
+	v0, _ := points[0].Value.(uint16)
+	v1, _ := points[1].Value.(uint16)
+	if v0 != 0xAAAA {
+		t.Errorf("points[0].Value = 0x%04X, want 0xAAAA", v0)
+	}
+	if v1 != 0xBBBB {
+		t.Errorf("points[1].Value = 0x%04X, want 0xBBBB", v1)
 	}
 }

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"errors"
+	"time"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
@@ -29,6 +30,12 @@ type Resource struct {
 	Type    string
 	Decoder string
 	Args    map[string]any // Holds protocol-specific attributes
+}
+
+type ReceiveEvent struct {
+	EventName string
+	EventTime time.Time
+	EventData []byte
 }
 
 // NewResource converts EdgeX model to generic Resource

@@ -24,7 +24,7 @@ const readCommandsExecutedName = "ReadCommandsExecuted"
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // send adta
-	dataCh               chan *connector.AsyncData           // Bridge channel between Receivers and EdgeX
+	receivedData         chan connector.ReceiveEvent         // Bridge channel between Receivers and EdgeX
 	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
 	ctx                  context.Context
 	cancel               context.CancelFunc
@@ -42,7 +42,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	cd.ctx, cd.cancel = context.WithCancel(context.Background())
 
 	// Initialize channel with buffer size based on expected concurrency
-	cd.dataCh = make(chan *connector.AsyncData, 100)
+	cd.receivedData = make(chan connector.ReceiveEvent, 256)
 
 	ds := interfaces.Service()
 	// Log the service version
@@ -85,12 +85,13 @@ func (cd *CompositeDriver) Start() (err error) {
 		connector.WithTimeout(5*time.Second))
 	cd.lc.Info("Polls Started")
 
+	cd.receivers = connector.NewReceivers(15, 16)
 	//  Start the internal consumer goroutine
 	go cd.processReceiveData()
-	cd.receivers = connector.NewReceivers(":8080")
+	cd.receivers.RegisterHttpServer("127.0.0.1", 8000, "/alarm/push", cd.receivedData)
 
 	// Start all receivers, passing the internal channel to them
-	if err = cd.receivers.StartAll(cd.ctx, cd.dataCh); err != nil {
+	if err = cd.receivers.StartAll(cd.ctx); err != nil {
 		cd.lc.Errorf("Failed to start the receiver: %v", err)
 		return err
 	}
@@ -223,16 +224,17 @@ func (cd *CompositeDriver) Discover() {
 	cd.deviceCh <- res
 }
 
-// processReceiveData reads from dataCh and pushes to EdgeX
+// processReceiveData reads from receivedData and pushes to EdgeX
 func (cd *CompositeDriver) processReceiveData() {
 	for {
 		select {
 		case <-cd.ctx.Done():
 			// Exit loop when Driver stops
 			return
-		case data := <-cd.dataCh:
+		case data := <-cd.receivedData:
+			cd.lc.Debugf("@!Received data: %v", data)
 			// Convert AsyncData to EdgeX CommandValue
-			cv, err := sdkModels.NewCommandValue(data.ResourceName, common.ValueTypeFloat64, data.Value)
+			cv, err := sdkModels.NewCommandValue("", common.ValueTypeFloat64, 1.1)
 			if err != nil {
 				cd.lc.Errorf("Failed to create CommandValue: %v", err)
 				continue
@@ -240,7 +242,7 @@ func (cd *CompositeDriver) processReceiveData() {
 
 			// Wrap into EdgeX AsyncValues structure
 			asyncVal := &sdkModels.AsyncValues{
-				DeviceName:    data.DeviceName,
+				DeviceName:    "Test Receiver",
 				CommandValues: []*sdkModels.CommandValue{cv},
 			}
 

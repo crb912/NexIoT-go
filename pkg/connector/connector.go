@@ -1,7 +1,6 @@
 package connector
 
 import (
-	"context"
 	"fmt"
 	"octopus-edge/pkg/parser"
 	"octopus-edge/pkg/protocol"
@@ -50,7 +49,7 @@ type RWClient interface {
 
 // ReceiverAdapter interface: all passive protocols must implement this
 type ReceiverAdapter interface {
-	Start(ctx context.Context, outCh chan<- *protocol.AsyncData) error
+	Start() error
 	Stop() error
 }
 

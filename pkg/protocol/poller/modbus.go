@@ -46,29 +46,6 @@ const (
 	tableInputRegisters   tableType = "INPUT_REGISTERS"
 )
 
-// newClient creates and configures a new modbus client.
-func (m *ModbusClient) newClient() (*modbus.ModbusClient, error) {
-	clientConfig := &modbus.ClientConfiguration{
-		URL:     m.EndPoint,
-		Timeout: m.Timeout,
-	}
-
-	if m.BaudRate > 0 {
-		clientConfig.Speed = m.BaudRate
-		clientConfig.DataBits = m.DataBits
-		clientConfig.StopBits = m.StopBits
-		clientConfig.Parity = m.Parity
-	}
-
-	underlyingClient, err := modbus.NewClient(clientConfig)
-	if err != nil {
-		m.connected = false
-		return underlyingClient, fmt.Errorf("failed to create modbus client: %w", err)
-	}
-	m.connected = true
-	return underlyingClient, nil
-}
-
 // Connect opens the physical connection.
 func (m *ModbusClient) Connect() error {
 	m.mu.Lock()
@@ -178,6 +155,29 @@ func (m *ModbusClient) ReadBatch(points []protocol.Resource) error {
 		return fmt.Errorf("unexpected data type returned from read: %T", dataAny)
 	}
 	return nil
+}
+
+// newClient creates and configures a new modbus client.
+func (m *ModbusClient) newClient() (*modbus.ModbusClient, error) {
+	clientConfig := &modbus.ClientConfiguration{
+		URL:     m.EndPoint,
+		Timeout: m.Timeout,
+	}
+
+	if m.BaudRate > 0 {
+		clientConfig.Speed = m.BaudRate
+		clientConfig.DataBits = m.DataBits
+		clientConfig.StopBits = m.StopBits
+		clientConfig.Parity = m.Parity
+	}
+
+	underlyingClient, err := modbus.NewClient(clientConfig)
+	if err != nil {
+		m.connected = false
+		return underlyingClient, fmt.Errorf("failed to create modbus client: %w", err)
+	}
+	m.connected = true
+	return underlyingClient, nil
 }
 
 // read reads data from the Modbus server.
