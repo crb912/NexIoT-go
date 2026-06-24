@@ -31,163 +31,129 @@ set_val = {
 class JsonDataBlock(ModbusSequentialDataBlock):
     def __init__(self, memory_store, is_bit=False):
         self.is_bit = is_bit
-        # Dictionary to store register values based on physical wire address (0-based)
         self.memory = memory_store
-        # Init with a dummy list to pass parent class checks
-        super().__init__(0x00, [0])
+        super().__init__(0x00, [0]) # Dummy init to pass parent checks
 
     def validate(self, address, count=1):
-        # Always return True to skip strict boundary checks
+        # Skip boundary checks
         return True
 
     def getValues(self, address, count=1):
-        logical_addr = address
-        # Subtract 1 to get the actual wire address (0-based)
+        # Handle read requests
         physical_addr = address - 1
         values = []
 
         for i in range(count):
-            current_addr = physical_addr + i
-
-            # 1. Use the preset value if it exists in the configuration memory
-            if current_addr in self.memory:
-                val = self.memory[current_addr]
-            # 2. If no preset value, dynamically generate the fallback value
+            curr_addr = physical_addr + i
+            if curr_addr in self.memory:
+                val = self.memory[curr_addr]
             else:
-                if self.is_bit:
-                    # Rule: even physical address = True, odd = False
-                    val = (current_addr % 2 == 0)
-                else:
-                    # Rule: return the physical address value itself
-                    val = current_addr
+                # Fallback data generation
+                val = (curr_addr % 2 == 0) if self.is_bit else curr_addr
 
-            if self.is_bit:
-                values.append(bool(val))
-            else:
-                values.append(int(val))
+            values.append(bool(val) if self.is_bit else int(val))
 
-        data_type = "BIT" if self.is_bit else "REG"
-        end_physical = physical_addr + count - 1
-        end_logical = logical_addr + count - 1
-
-        if count == 1:
-            logging.info(f" [READ {data_type}] Device Reg: {logical_addr} ; Wire Addr: {physical_addr} | Returns: {values[0]}")
-        else:
-            logging.info(f" [READ {data_type}] Device Reg: {logical_addr}~{end_logical} ; Wire Addr: {physical_addr}~{end_physical} | Returns: {values}")
-
+        logging.info(f"[READ] Addr: {physical_addr} | Count: {count} | Values: {values}")
         return values
 
     def setValues(self, address, values):
-        logical_addr = address
+        # Handle write requests and save to memory store
         physical_addr = address - 1
-        data_type = "BIT" if self.is_bit else "REG"
-
-        # Save written values into our dictionary to persist changes
         for i, val in enumerate(values):
             self.memory[physical_addr + i] = val
 
-        count = len(values)
-        end_physical = physical_addr + count - 1
-        end_logical = logical_addr + count - 1
+        logging.info(f"[WRITE] Addr: {physical_addr} | Count: {len(values)} | Written: {values}")
 
-        if count == 1:
-            logging.info(f" [WRITE {data_type}] Wire Addr: {physical_addr} -> Device Reg: {logical_addr} | Writes: {values[0]}")
-        else:
-            logging.info(f" [WRITE {data_type}] Wire Addr: {physical_addr}~{end_physical} -> Device Reg: {logical_addr}~{end_logical} | Writes: {values}")
 
 # ==========================================
+# SRP Refactored Configuration Parsers
+# ==========================================
 
-def load_json_profile(file_path):
-    memory = {}
+def load_json_file(file_path):
+    # Read and parse the JSON file safely
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            profile = json.load(f)
-    except FileNotFoundError:
-        logging.error(f"Configuration file not found at: {file_path}")
-        return memory
-    except json.JSONDecodeError:
-        logging.error("Failed to parse the JSON file.")
-        return memory
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logging.error(f"Failed to load JSON: {e}")
+        return {}
 
-    for resource in profile.get("deviceResources", []):
+def decode_mac(mac_str):
+    # Convert MAC string to three uint16 registers
+    clean_mac = str(mac_str).replace(":", "")
+    mac_bytes = bytes.fromhex(clean_mac)
+    return struct.unpack(">HHH", mac_bytes) if len(mac_bytes) == 6 else []
+
+def decode_ipv4(ip_str):
+    # Convert IPv4 string to two uint16 registers
+    packed_ip = socket.inet_aton(str(ip_str))
+    return struct.unpack(">HH", packed_ip)
+
+def decode_uint32(val):
+    # Convert uint32 integer to two uint16 registers
+    packed_u32 = struct.pack(">I", int(val))
+    return struct.unpack(">HH", packed_u32)
+
+def populate_memory(profile_data, memory, overrides):
+    # Map decoded register values to physical wire addresses
+    for resource in profile_data.get("deviceResources", []):
         attrs = resource.get("attributes", {})
-        props = resource.get("properties", {})
         name = resource.get("name", "")
 
         if "address" not in attrs:
             continue
 
-        logical_addr = attrs["address"]
-        wire_addr = logical_addr - 1
+        wire_addr = attrs["address"] - 1
+        default_val = overrides.get(name, resource.get("properties", {}).get("defaultValue"))
+        decode_func = attrs.get("decodefunc", "")
         length = attrs.get("length", 1)
-        default_val = props.get("defaultValue")
 
-        if name in set_val:
-            default_val = set_val[name]
+        if default_val is None:
+            continue
 
-        if default_val is not None:
-            decode_func = attrs.get("decodefunc", "")
+        try:
+            if "decodeMACAddress" in decode_func or "mac" in name.lower():
+                regs = decode_mac(default_val)
+                for i, r in enumerate(regs): memory[wire_addr + i] = r
 
-            # MAC 地址（3个寄存器）
-            if "decodeMACAddress" in decode_func or name == "mac_address":
-                try:
-                    clean_mac = str(default_val).replace(":", "")
-                    mac_bytes = bytes.fromhex(clean_mac)
-                    if len(mac_bytes) == 6:
-                        regs = struct.unpack(">HHH", mac_bytes)
-                        memory[wire_addr] = regs[0]
-                        memory[wire_addr + 1] = regs[1]
-                        memory[wire_addr + 2] = regs[2]
-                except ValueError:
-                    logging.warning(f"Invalid MAC address format: {default_val}")
+            elif "decodeIPv4Address" in decode_func or name in ["ip_address", "subnet_mask", "gateway", "dns"]:
+                regs = decode_ipv4(default_val)
+                for i, r in enumerate(regs[:length]): memory[wire_addr + i] = r
 
-            # IPv4 地址（2个寄存器，大端）
-            elif "decodeIPv4Address" in decode_func or name in ["ip_address", "subnet_mask", "gateway", "dns", "target_ip_address"]:
-                try:
-                    packed_ip = socket.inet_aton(str(default_val))
-                    regs = struct.unpack(">HH", packed_ip)
-                    memory[wire_addr] = regs[0]
-                    if length > 1:
-                        memory[wire_addr + 1] = regs[1]
-                except socket.error:
-                    logging.warning(f"Invalid IP address format: {default_val}")
-
-            # 32位整数（2个寄存器，大端字序，和IP保持一致）
             elif length == 2 and isinstance(default_val, int):
-                try:
-                    # 大端打包 uint32，再拆成两个 uint16
-                    packed_u32 = struct.pack(">I", default_val)
-                    regs = struct.unpack(">HH", packed_u32)
-                    memory[wire_addr] = regs[0]      # 低地址 = 高字
-                    memory[wire_addr + 1] = regs[1]  # 高地址 = 低字
-                except struct.error:
-                    logging.warning(f"Invalid uint32 value: {default_val}")
+                regs = decode_uint32(default_val)
+                for i, r in enumerate(regs): memory[wire_addr + i] = r
 
-            # 普通 16位整数
             else:
-                try:
-                    memory[wire_addr] = int(default_val)
-                except ValueError:
-                    pass
+                memory[wire_addr] = int(default_val)
 
-    # 移除硬编码的 memory[8300] = 0，由上面的 length=2 逻辑自动处理
-    logging.info(f"Loaded {len(memory)} predefined registers from JSON profile.")
+        except Exception as e:
+            logging.warning(f"Error parsing {name} with value {default_val}: {e}")
+
     return memory
 
+def build_initial_memory(file_path):
+    # Master builder function for memory store
+    profile_data = load_json_file(file_path)
+    memory = populate_memory(profile_data, {}, set_val)
+    logging.info(f"Loaded {len(memory)} registers into memory.")
+    return memory
+
+
+# ==========================================
+# Server Startup Logic
+# ==========================================
+
 async def create_simulator():
-    print("Starting JSON-Driven Modbus TCP Slave Simulator...")
+    print("Starting JSON-Driven Modbus TCP Simulator...")
 
-    port = 5020
-    host = "0.0.0.0"
-    node_id = 1
-
-    # Use pathlib to get the absolute path based on the current script location
     script_dir = Path(__file__).parent.parent
     json_path = script_dir / "res" / "profiles" / "modbus.test.profile.json"
 
-    # Load initial memory from the JSON file
-    initial_memory = load_json_profile(str(json_path))
+    # Initialize the memory dictionary
+    initial_memory = build_initial_memory(str(json_path))
 
+    # Apply the same memory dict to Holding (hr) and Input (ir) registers
     store = ModbusDeviceContext(
         co=JsonDataBlock(memory_store={}, is_bit=True),
         di=JsonDataBlock(memory_store={}, is_bit=True),
@@ -195,16 +161,13 @@ async def create_simulator():
         ir=JsonDataBlock(memory_store=initial_memory, is_bit=False)
     )
 
-    devices_dict = {node_id: store}
-    logging.info(f"Loaded slave node: Node ID {node_id}")
+    context = ModbusServerContext({1: store}, single=False)
 
-    context = ModbusServerContext(devices_dict, single=False)
-
-    logging.info(f"Listening on {host}:{port}")
-    await StartAsyncTcpServer(context=context, address=(host, port))
+    logging.info("Listening on 0.0.0.0:5020")
+    await StartAsyncTcpServer(context=context, address=("0.0.0.0", 5020))
 
 if __name__ == "__main__":
     try:
         asyncio.run(create_simulator())
     except KeyboardInterrupt:
-        print("\nSimulator closed.")
+        print("\nSimulator closed safely.")

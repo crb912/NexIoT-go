@@ -101,3 +101,29 @@ func HandleReadBatch(reader ReadClient, req []sdkModels.CommandRequest) ([]*sdkM
 	}
 	return cvList, nil
 }
+
+// HandleWriteSingle processes a single write command.
+func HandleWriteSingle(writer Writer, req sdkModels.CommandRequest, param *sdkModels.CommandValue) error {
+	res := protocol.NewResource(req)
+	res.Value = param.Value
+
+	if err := writer.WriteSingle(&res); err != nil {
+		return fmt.Errorf("HandleWriteSingle: resource %s: %w", req.DeviceResourceName, err)
+	}
+	return nil
+}
+
+// HandleWriteBatch processes a batch write command.
+func HandleWriteBatch(writer Writer, reqs []sdkModels.CommandRequest, params []*sdkModels.CommandValue) error {
+	resList := protocol.NewResourceN(reqs)
+	for i := range resList {
+		if i < len(params) {
+			resList[i].Value = params[i].Value
+		}
+	}
+
+	if err := writer.WriteBatch(resList); err != nil {
+		return fmt.Errorf("HandleWriteBatch: %w", err)
+	}
+	return nil
+}

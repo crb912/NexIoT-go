@@ -146,7 +146,6 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			res = append(res, cv)
 			cd.readCommandsExecuted.Inc(1)
 			cd.lc.Debugf("@read ok: dev %s, res %s, val %v ", deviceName, cv.DeviceResourceName, cv.Value)
-			continue
 		}
 
 		cvList, err := connector.HandleReadBatch(reader, reqs)
@@ -160,16 +159,42 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 	return
 }
 
-// HandleWriteCommands passes a slice of CommandRequest struct each representing
-// a ResourceOperation for a specific device resource.
-// Since the commands are actuation commands, params provide parameters for the individual
-// command.
+// HandleWriteCommands triggers a Write operation for the specified device.
 func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
 	params []*sdkModels.CommandValue) error {
+	for protocolName, protocolProperties := range protocols {
+		protocolConfig := cache.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
 
-	for index, r := range reqs {
-		cd.lc.Debugf("Driver HandleWriteCommands: protocols: %v, resource: %v, parameters: %v, attributes: %v", protocols, reqs[index].DeviceResourceName, params[index], reqs[index].Attributes)
-		cd.lc.Infof("Please write data value (%s) to resource (%s) device(%s)", params[index].Value, r.DeviceResourceName, deviceName)
+		if protocolConfig.IsDisabled() {
+			cd.lc.Debugf("Skip write: device %s protocol %s (disabled)", deviceName, protocolName)
+			continue
+		}
+
+		handler, err := cd.polls.GetHandler(protocolConfig)
+		if err != nil {
+			cd.lc.Errorf("No handler for protocol: %s, device: %s, err: %v", protocolName, deviceName, err)
+			continue
+		}
+
+		writer, ok := handler.(connector.Writer)
+		if !ok {
+			cd.lc.Errorf("Protocol %s does not support write operations for device %s", protocolName, deviceName)
+			continue
+		}
+
+		if len(reqs) == 1 {
+			if err := connector.HandleWriteSingle(writer, reqs[0], params[0]); err != nil {
+				cd.lc.Errorf("@write failed: dev %s, res %s, err %v", deviceName, reqs[0].DeviceResourceName, err)
+				return err
+			}
+			cd.lc.Debugf("@write ok: dev %s, res %s, val %v", deviceName, reqs[0].DeviceResourceName, params[0].Value)
+		} else {
+			if err := connector.HandleWriteBatch(writer, reqs, params); err != nil {
+				cd.lc.Errorf("@write batch failed: dev %s, err %v", deviceName, err)
+				return err
+			}
+			cd.lc.Debugf("@write batch ok: dev %s", deviceName)
+		}
 	}
 	return nil
 }

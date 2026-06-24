@@ -208,7 +208,7 @@
       "name": "year",
       "isHidden": false,
       "description": "Year",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8300, "length": 2 },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8300, "length": 2, "decodefunc": "toUnit32"},
       "properties": { "valueType": "Uint32", "readWrite": "RW", "minimum": "2000" }
     },
     {
@@ -285,7 +285,7 @@
     },
     {
       "name": "System-Time",
-      "readWrite": "R",
+      "readWrite": "RW",
       "isHidden": false,
       "resourceOperations": [
         { "deviceResource": "year" },

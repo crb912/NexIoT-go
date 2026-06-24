@@ -99,7 +99,7 @@ SubscribeTopic = 'edgex/events/app/#'
 
   [MessageQueue.Topics]
   # subscribing for inbound command requests
-  CommandRequestTopic = "edgex/device/command/request/hermes-edge/#"
+  CommandRequestTopic = "edgex/device/command/request/octopus-edge/#"
   # publishing outbound command responses; <device-service>/<device-name>/<command-name>/<method> will be added to this publish topic prefix
   CommandResponseTopicPrefix = "edgex/device/command/response"
 

@@ -57,8 +57,8 @@ EdgeX UI: http://localhost:4000
 ### Start Device Services
 
 ```shell
-git clone git@github.com:crb912/hermes-edge.git
-cd hermes-edge
+git clone git@github.com:crb912/octopus-edge.git
+cd octopus-edge
 go mod tidy
 go build ./cmd/main.go
 
@@ -157,7 +157,7 @@ v2 only supports **YAML** or **JSON** format for device profile configuration fi
 cd scripts
 python update_profiles.py
 
-# Scanning folder: /home/raybing/Desktop/github/hermes-edge/res/profiles
+# Scanning folder: /home/raybing/Desktop/github/octopus-edge/res/profiles
 # Updating: modbus.test.profile.json
 # Status: 207
 # Response: [{"apiVersion":"v2","statusCode":200}]
