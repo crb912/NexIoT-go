@@ -94,11 +94,6 @@ func (m *ModbusClient) Disconnect() error {
 	return nil
 }
 
-// GetProtocolType returns the protocol type.
-func (m *ModbusClient) GetProtocolType() protocol.ProtocolType {
-	return m.ProtocolType
-}
-
 // IsConnected checks if the client is still connected.
 func (m *ModbusClient) IsConnected() bool {
 	m.mu.Lock()

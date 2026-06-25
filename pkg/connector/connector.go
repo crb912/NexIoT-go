@@ -13,7 +13,6 @@ type Session interface {
 	Connect() error
 	Disconnect() error
 	IsConnected() bool
-	GetProtocolType() protocol.ProtocolType
 }
 
 // Reader defines the standard read interface for all protocol plugins.

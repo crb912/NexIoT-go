@@ -307,26 +307,6 @@ func (cd *CompositeDriver) ProcessCustomConfigChanges(rawWritableConfig interfac
 	}
 }
 
-func (cd *CompositeDriver) ValidateDevice(device models.Device) error {
-	// 校验 modbus-tcp 协议
-	tcpProtocol, ok := device.Protocols["modbus-tcp"]
-	if !ok {
-		return errors.New("missing 'modbus-tcp' protocols")
-	}
-
-	addr, ok := tcpProtocol["Address"]
-	if !ok || addr == "" {
-		return errors.New("missing or empty 'Address' in modbus-tcp")
-	}
-
-	port, ok := tcpProtocol["Port"]
-	if !ok || port == "" {
-		return errors.New("missing 'Port' in modbus-tcp")
-	}
-
-	return nil
-}
-
 // Init all observability metrics for the driver
 // 初始化轻量的可观测性系统，观测边缘微服务的健康状态和运行性能
 func (cd *CompositeDriver) initMetrics(sdk interfaces.DeviceServiceSDK) error {
