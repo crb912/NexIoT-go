@@ -195,26 +195,6 @@ For developers who want to understand the internals or write custom protocol ada
 - **[Developer Wiki (English)](docs/wiki-en.md)** — ProtocolDriver interface deep-dive: Initialize/Stop lifecycle, HandleReadCommands/HandleWriteCommands, AddDevice/UpdateDevice/RemoveDevice patterns.
 - **[开发者 Wiki (中文)](docs/wiki-zh.md)** — 中文版，内容相同。
 
-## TODO
-
-1. 自动发现
-2. 版本更新与make
-3. 本地时区
-
-
-### 配置文件的格式
-
-
-
- 如何生成配置文件？
-
-在设备数量庞大的时候（一个大型公司可能超过上千种设备），用 yaml 文件维护设备和资源的yaml非常不方便，excel却是对实施人员更友好的设计模式，因此
-我实现了excel 转 yaml 生成的工具，该工具的代码不会编译进入主项目。您不需要手动调用该工具进行转换，建议在CI/CD 借用流水线调用该工具，将生成的yaml打包进入项目即可。或者部署在启用设备服务之前，先调用转换工具，生成配置文件。 同时是支持python或golang 编译的二进制两种方式。
-
-
-edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces
-对于非标准格式的配置，如何接入
-
 
 
 
