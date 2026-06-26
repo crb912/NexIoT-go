@@ -35,7 +35,7 @@ def convert_csv_to_json():
                 "length": int(row["Attr_Length"]) if row["Attr_Length"] else 1
             }
             if row["Attr_DecodeFunc"]:
-                attributes["decodefunc"] = row["Attr_DecodeFunc"]
+                attributes["decodeFunc"] = row["Attr_DecodeFunc"]
 
             # Build resource properties
             properties = {

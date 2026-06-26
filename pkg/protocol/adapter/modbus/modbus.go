@@ -1,13 +1,10 @@
-// Package poller handles polling devices.
-// pkg/protocol/poller/modbus.go
-package poller
+package modbus
 
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/parser"
-	"octopus-edge/pkg/protocol"
-	"strconv"
+	"octopus-edge/pkg/conv"
+	"octopus-edge/pkg/protocol/model"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +28,7 @@ type Client interface {
 // ModbusClient holds network settings for the connection.
 type ModbusClient struct {
 	EndPoint     string
-	ProtocolType protocol.ProtocolType
+	ProtocolType model.ProtocolType
 	Timeout      time.Duration
 	BaudRate     uint
 	DataBits     uint
@@ -125,7 +122,7 @@ func (m *ModbusClient) IsConnected() bool {
 }
 
 // ReadSingle reads one Modbus resource.
-func (m *ModbusClient) ReadSingle(res *protocol.Resource) error {
+func (m *ModbusClient) ReadSingle(res *model.Resource) error {
 	// Directly convert number to uint16 and subtract 1 for 0-based protocol address.
 	addr := uint16(res.Address.(float64)) - 1
 
@@ -134,12 +131,12 @@ func (m *ModbusClient) ReadSingle(res *protocol.Resource) error {
 	if err != nil {
 		return err
 	}
-	res.Value = extractValue(data, res.Type, res.Length)
+	res.Value = extractRegisterValue(data, res.Type, res.Length)
 	return nil
 }
 
 // ReadBatch reads data for a list of points in one request.
-func (m *ModbusClient) ReadBatch(points []protocol.Resource) error {
+func (m *ModbusClient) ReadBatch(points []model.Resource) error {
 	minAddr, quantity := calculateBatchSpan(points)
 
 	tt := getTableType(points[0].Args)
@@ -160,21 +157,21 @@ func (m *ModbusClient) ReadBatch(points []protocol.Resource) error {
 }
 
 // WriteSingle writes a single value to the Modbus device.
-func (m *ModbusClient) WriteSingle(res *protocol.Resource) error {
+func (m *ModbusClient) WriteSingle(res *model.Resource) error {
 	addr := uint16(res.Address.(float64)) - 1
 	tt := getTableType(res.Args)
 
 	switch tt {
 	case tableCoils:
-		val, err := toBool(res.Value)
+		val, err := conv.ToBool(res.Value)
 		if err != nil {
 			return fmt.Errorf("WriteSingle coil: %w", err)
 		}
 		return m.client.WriteCoil(addr, val)
 	case tableHoldingRegisters:
-		values, err := parser.EncodeRawData(res.Decoder, res.Type, res.Length, res.Value)
+		values, err := conv.ToUint16Slice(res.Value)
 		if err != nil {
-			return fmt.Errorf("WriteSingle register: %w", err)
+			return fmt.Errorf("WriteSingle register: %w, resource=%s, type=%s", err, res.Name, res.Type)
 		}
 		if len(values) == 1 {
 			return m.client.WriteRegister(addr, values[0])
@@ -191,12 +188,12 @@ func (m *ModbusClient) WriteSingle(res *protocol.Resource) error {
 
 // WriteBatch writes multiple values to the Modbus device in one request.
 // All points must belong to the same primaryTable type.
-func (m *ModbusClient) WriteBatch(points []protocol.Resource) error {
+func (m *ModbusClient) WriteBatch(points []model.Resource) error {
 	if len(points) == 0 {
 		return errors.New("WriteBatch: no points to write")
 	}
 
-	minAddr, quantity := calculateBatchSpan(points)
+	minAddr, _ := calculateBatchSpan(points)
 	tt := getTableType(points[0].Args)
 
 	// Prepare value arrays for modbus write (0-based protocol address).
@@ -204,13 +201,13 @@ func (m *ModbusClient) WriteBatch(points []protocol.Resource) error {
 
 	switch tt {
 	case tableCoils:
-		values, err := buildBoolSlice(points, minAddr, quantity)
+		values, err := toBoolSliceBatch(points)
 		if err != nil {
 			return fmt.Errorf("WriteBatch coils: %w", err)
 		}
 		return m.client.WriteCoils(protocolAddr, values)
 	case tableHoldingRegisters:
-		values, err := buildUint16Slice(points, minAddr, quantity)
+		values, err := toUint16SliceBatch(points)
 		if err != nil {
 			return fmt.Errorf("WriteBatch registers: %w", err)
 		}
@@ -262,7 +259,7 @@ func (m *ModbusClient) read(addressStart uint16, quantity uint16, tt tableType) 
 }
 
 // calculateBatchSpan gets the start address and total length.
-func calculateBatchSpan(points []protocol.Resource) (minAddr uint16, quantity uint16) {
+func calculateBatchSpan(points []model.Resource) (minAddr uint16, quantity uint16) {
 	minAddr = 0xFFFF
 	var maxEnd uint16 = 0
 
@@ -286,20 +283,20 @@ func calculateBatchSpan(points []protocol.Resource) (minAddr uint16, quantity ui
 }
 
 // assignResValues sets the correct data slice for each resource.
-func assignResValues[T bool | uint16](points []protocol.Resource, minAddr uint16, data []T) {
+func assignResValues[T bool | uint16](points []model.Resource, minAddr uint16, data []T) {
 	for i := range points {
 		addr := uint16(points[i].Address.(float64))
 		offset := addr - minAddr
 
 		// Safety check to prevent index out of range panic.
 		if int(offset)+int(points[i].Length) <= len(data) {
-			points[i].Value = extractValue(data[offset:offset+points[i].Length], points[i].Type, points[i].Length)
+			points[i].Value = extractRegisterValue(data[offset:offset+points[i].Length], points[i].Type, points[i].Length)
 		}
 	}
 }
 
-// extractValue get data from raw Modbus data ([]bool, []unit16).
-func extractValue(rawData any, resType string, length uint16) any {
+// extractRegisterValue get data from raw Modbus data ([]bool, []unit16).
+func extractRegisterValue(rawData any, resType string, length uint16) any {
 	if length > 1 {
 		return rawData
 	}
@@ -338,102 +335,29 @@ func getTableType(args map[string]any) tableType {
 	}
 }
 
-// ─── Write helpers ───────────────────────────────────────────────────────
-
-// toUint16 converts an interface{} value to uint16 for modbus register writes.
-// Handles common types received from EdgeX CommandValue params: string, int, float64, uint16.
-func toUint16(v any) (uint16, error) {
-	switch val := v.(type) {
-	case uint16:
-		return val, nil
-	case uint8:
-		return uint16(val), nil
-	case int:
-		if val < 0 || val > 65535 {
-			return 0, fmt.Errorf("toUint16: value %d out of uint16 range", val)
-		}
-		return uint16(val), nil
-	case int64:
-		if val < 0 || val > 65535 {
-			return 0, fmt.Errorf("toUint16: value %d out of uint16 range", val)
-		}
-		return uint16(val), nil
-	case float64:
-		if val < 0 || val > 65535 {
-			return 0, fmt.Errorf("toUint16: value %v out of uint16 range", val)
-		}
-		return uint16(val), nil
-	case string:
-		u, err := strconv.ParseUint(val, 10, 16)
+// ToBoolSliceBatch convert batch resource values to []bool
+// each resource.Value must be bool type
+func toBoolSliceBatch(points []model.Resource) ([]bool, error) {
+	out := make([]bool, 0, len(points))
+	for _, pt := range points {
+		b, err := conv.ToBoolSlice(pt.Value)
 		if err != nil {
-			return 0, fmt.Errorf("toUint16: cannot parse %q: %w", val, err)
+			return nil, fmt.Errorf("resource= %s: %w", pt.Name, err)
 		}
-		return uint16(u), nil
-	default:
-		return 0, fmt.Errorf("toUint16: unsupported type %T", v)
+		out = append(out, b...)
 	}
+	return out, nil
 }
 
-// toBool converts an interface{} value to bool for modbus coil writes.
-func toBool(v any) (bool, error) {
-	switch val := v.(type) {
-	case bool:
-		return val, nil
-	case int:
-		return val != 0, nil
-	case float64:
-		return val != 0, nil
-	case string:
-		switch val {
-		case "true", "True", "TRUE", "1":
-			return true, nil
-		case "false", "False", "FALSE", "0":
-			return false, nil
-		default:
-			return false, fmt.Errorf("toBool: cannot parse %q as bool", val)
-		}
-	default:
-		return false, fmt.Errorf("toBool: unsupported type %T", v)
-	}
-}
-
-// buildUint16Slice creates a []uint16 slice covering [minAddr, minAddr+quantity)
-// by reading each point's Value and placing it at the correct offset.
-func buildUint16Slice(points []protocol.Resource, minAddr, quantity uint16) ([]uint16, error) {
-	values := make([]uint16, quantity)
-	for i := range points {
-		addr := uint16(points[i].Address.(float64))
-		offset := addr - minAddr
-		encoded, err := parser.EncodeRawData(points[i].Decoder, points[i].Type, points[i].Length, points[i].Value)
+// ToUint16SliceBatch convert batch resource values to []uint16
+func toUint16SliceBatch(points []model.Resource) ([]uint16, error) {
+	out := make([]uint16, 0, len(points))
+	for _, pt := range points {
+		u, err := conv.ToUint16Slice(pt.Value)
 		if err != nil {
-			return nil, fmt.Errorf("buildUint16Slice: resource %s: %w", points[i].Name, err)
+			return nil, fmt.Errorf("resource= %s: %w", pt.Name, err)
 		}
-		if int(offset)+len(encoded) > len(values) {
-			return nil, fmt.Errorf("buildUint16Slice: offset %d + len %d exceeds quantity %d for resource %s",
-				offset, len(encoded), quantity, points[i].Name)
-		}
-		for j := uint16(0); j < uint16(len(encoded)); j++ {
-			values[offset+j] = encoded[j]
-		}
+		out = append(out, u...)
 	}
-	return values, nil
-}
-
-// buildBoolSlice creates a []bool slice covering [minAddr, minAddr+quantity)
-// by reading each point's Value and placing it at the correct offset.
-func buildBoolSlice(points []protocol.Resource, minAddr, quantity uint16) ([]bool, error) {
-	values := make([]bool, quantity)
-	for i := range points {
-		addr := uint16(points[i].Address.(float64))
-		offset := addr - minAddr
-		if int(offset)+1 > len(values) {
-			return nil, fmt.Errorf("buildBoolSlice: offset %d out of range for resource %s", offset, points[i].Name)
-		}
-		val, err := toBool(points[i].Value)
-		if err != nil {
-			return nil, fmt.Errorf("buildBoolSlice: resource %s: %w", points[i].Name, err)
-		}
-		values[offset] = val
-	}
-	return values, nil
+	return out, nil
 }

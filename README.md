@@ -1,15 +1,11 @@
-An IoT Edge Gateway based on EdgeX device-sdk-go v2.
+`octopus-edge`(IoT Edge) is a flexible, multi-protocol IoT edge gateway client built on edgexfoundry/edgex-compose. It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
 
-Under Active Development!
-<!-- Project status badge -->
-![Status](https://img.shields.io/badge/status-Work_in_Progress-orange)
-
-```text
-  .--.
- (oo)
-/(__)\
-\/  \/
-```
+Key Features: 
+- Multi-Protocol: Out-of-the-box support for Modbus, SNMP, OPC, HTTP, and MQTT.
+- Bi-Directional Operations: Supports both reading device resources and writing control commands.
+- Dual Ingestion Modes: Supports active scheduling/polling and passive data pushing from devices.
+- Configuration-Driven: Flexible read/write operations fully managed via configuration files.
+- Highly Extensible: Designed for easy integration of additional standard or proprietary protocols.
 
 ## Table of Contents
 
@@ -19,6 +15,9 @@ Under Active Development!
   - [Verify Data Acquisition](#verify-data-acquisition)
 - [System Architecture](#system-architecture)
 - [Configuration Guide](#configuration-guide)
+- [Documentation](#documentation)
+  - [Developer Wiki (English)](docs/wiki-en.md)
+  - [开发者 Wiki (中文)](docs/wiki-zh.md)
 
 
 ## Quick Start
@@ -140,7 +139,27 @@ curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/System
 
 ### How to Configure Device and Profiles
 
-Edit res/devices/*.json and update the IP addresses to match your physical or simulated hardware
+**NOTE: Each device must have two configuration files**.
+- One defines the basic properties of the device, such as name, protocol, and data collection interval.
+- One defines the device resources, such as specific resource attributes (temperature, pressure, humidity), data types, physical meanings, and mapping rules.
+
+Best Practice for Configuration Files:
+```text
+/res/devices/
+         |------ modbus.test.devices.json
+         |------ mqtt.test.device.json
+res/profiles/
+         |------ modbus.test.profile.json
+         |------ mqtt.test.profile.json
+res/custom/  
+         // Some custom configuration files (which you may need to parse manually).
+         |------ modbus.test.profile.csv
+         |------ mqtt.test.profile.xlsx
+```
+
+You can put all devices into a single `JSON/YAML` file. You can also separate them into different JSON/YAML files by protocol or device name.
+My recommended naming format is: protocol.device_name.devices.json. This makes it easy to maintain the devices in the future.
+It is recommended to use **JSON** for both devices and profiles to keep the configuration format consistent across the project.
 
 **Device Configuration** (`res/devices/`)
 
@@ -153,19 +172,28 @@ Edit res/devices/*.json and update the IP addresses to match your physical or si
 v2 only supports **YAML** or **JSON** format for device profile configuration files.
 
 > Reference: [device-sdk-go v2.3.0 example profiles](https://github.com/edgexfoundry/device-sdk-go/tree/v2.3.0/example/cmd/device-simple/res/profiles)
+
+**Custom Configuration** (`res/custom/`)
+
+To make configuration files easier to read and deploy, **using custom XLSX or CSV formats is a very good choice**. Although you can implement custom parsing logic directly in the project code, I strongly advise against it. Instead, you should convert the custom formats (like XLSX or CSV) into project-compatible JSON or YAML formats using a Python script or a standalone Go binary. **Pre-compiling configurations before the program starts is much better than parsing them at runtime**. This approach minimizes project dependencies and keeps the project code simple.
+
+### Update Config
+
 ```bash
 cd scripts
 python update_profiles.py
-
-# Scanning folder: /home/raybing/Desktop/github/octopus-edge/res/profiles
+# Scanning folder: ./res/profiles
 # Updating: modbus.test.profile.json
 # Status: 207
 # Response: [{"apiVersion":"v2","statusCode":200}]
 ```
 
-**Recommendation**
+## Documentation
 
-It is recommended to use **JSON** for both devices and profiles to keep the configuration format consistent across the project.
+For developers who want to understand the internals or write custom protocol adapters:
+
+- **[Developer Wiki (English)](docs/wiki-en.md)** — ProtocolDriver interface deep-dive: Initialize/Stop lifecycle, HandleReadCommands/HandleWriteCommands, AddDevice/UpdateDevice/RemoveDevice patterns.
+- **[开发者 Wiki (中文)](docs/wiki-zh.md)** — 中文版，内容相同。
 
 ## TODO
 
@@ -176,23 +204,7 @@ It is recommended to use **JSON** for both devices and profiles to keep the conf
 
 ### 配置文件的格式
 
-每个设备都必须有两个配置文件。
-- 一个定义设备的基本属性，比如：名称，使用的协议，事件采集间隔。
-- 一个定义设备持有的资源，比如温度传感器，压力，湿度等具体的资源属性，以及这些资源的数据类型，物理意义,映射的map。
 
-配置文件的规范:
-
-```text
-/res/devices/
-         |------ modbus.test.devices.yaml
-         |------ opc.test.device.yaml
-res/profiles/
-         |------ modbus.test.devices.yaml
-```
-
-你可以把所有设备放在同一个devices-list类型的yaml，也可以按协议的分类成不用yaml，也可以按工厂或设备的类型分类，甚至你可以每个设备单独用一个yaml
-
-我推荐的命名方式是：  协议名.分类名.devices.yaml， 这样方便后续维护这些设备。
 
  如何生成配置文件？
 
@@ -204,46 +216,6 @@ edge-sdk-go interface: https://pkg.go.dev/github.com/edgexfoundry/device-sdk-go/
 对于非标准格式的配置，如何接入
 
 
-## 其他
-
-```bash
-# Run unit tests
-make test
-# Generate HTML coverage report
-make test-cover
-```
-
-## Production Deployment
-
-```bash
-# Build the Docker image
-make docker
-# Tag and push to your registry
-docker tag edge-gateway:dev registry.example.com/edge-gateway:1.0.0
-docker push registry.example.com/edge-gateway:1.0.0
-```
 
 
-Bootstrap() 调用
-│
-├── 1. 解析命令行参数（-p, -cd, -cf, -i, -r, -cp 等）
-│
-├── 2. 加载配置文件（configuration.yaml）或从 Consul 拉取配置
-│
-├── 3. 向 Registry（Consul）注册本服务
-│
-├── 4. 连接 EdgeX 核心服务
-│        ├── core-metadata（设备、Profile、ProvisionWatcher）
-│        └── core-data / Message Bus（事件上报）
-│
-├── 5. 初始化缓存（设备、Profile、ProvisionWatcher 等）
-│
-├── 6. 调用 driver.Initialize(sdk) ← 用户自定义初始化逻辑
-│
-├── 7. 启动 REST API HTTP Server（设备命令路由）
-│
-├── 8. 启动 AutoEvents（自动采集事件）
-│
-├── 9. 调用 driver.Start() ← 用户初始化后置逻辑（新版本）
-│
-└── 10. 阻塞等待关闭信号（SIGTERM/SIGINT），触发 driver.Stop()
+

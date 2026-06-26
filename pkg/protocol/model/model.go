@@ -1,4 +1,4 @@
-package protocol
+package model
 
 import (
 	"errors"
@@ -29,6 +29,7 @@ type Resource struct {
 	Value   any
 	Type    string
 	Decoder string
+	Encoder string
 	Args    map[string]any // Holds protocol-specific attributes
 }
 
@@ -51,8 +52,10 @@ func NewResource(deviceRes sdkModels.CommandRequest) Resource {
 			res.Address = value
 		case "length":
 			res.Length = uint16(value.(float64))
-		case "decodefunc":
+		case "decodeFunc":
 			res.Decoder, _ = value.(string)
+		case "encodeFunc":
+			res.Encoder, _ = value.(string)
 		default:
 			if res.Args == nil {
 				res.Args = make(map[string]any)

@@ -1,4 +1,4 @@
-package receiver
+package http_receiver
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"octopus-edge/pkg/protocol"
+	"octopus-edge/pkg/protocol/model"
 	"time" // Imported for Shutdown timeout
 )
 
@@ -25,7 +25,7 @@ type HttpReceiver struct {
 	Port      uint16
 	PushUrl   string
 	mux       *http.ServeMux
-	AsyncData chan protocol.ReceiveEvent
+	AsyncData chan model.ReceiveEvent
 	server    *http.Server
 }
 
@@ -38,7 +38,7 @@ func NewHttpReceiver(host string, port uint16, pushPath string) *HttpReceiver {
 		Port:      port,
 		PushUrl:   pushPath,
 		mux:       mux,
-		AsyncData: make(chan protocol.ReceiveEvent, maxDataChannelSize),
+		AsyncData: make(chan model.ReceiveEvent, maxDataChannelSize),
 		// Initialize server here to avoid data race between Start and Stop.
 		server: &http.Server{
 			Addr:    fmt.Sprintf("%s:%d", host, port),
@@ -107,7 +107,7 @@ func (r *HttpReceiver) handlePush(w http.ResponseWriter, req *http.Request) {
 	}
 
 	select {
-	case r.AsyncData <- protocol.ReceiveEvent{EventName: eventName, EventTime: time.Now(), EventData: payload}:
+	case r.AsyncData <- model.ReceiveEvent{EventName: eventName, EventTime: time.Now(), EventData: payload}:
 		writeJSON(w, http.StatusOK, map[string]string{"message": "received"})
 	default:
 		writeError(w, http.StatusServiceUnavailable, "server busy")

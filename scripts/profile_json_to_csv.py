@@ -79,7 +79,7 @@ def convert_json_to_csv():
                 "Attr_PrimaryTable": attrs.get("primaryTable", ""),
                 "Attr_Address": attrs.get("address", ""),
                 "Attr_Length": attrs.get("length", ""),
-                "Attr_DecodeFunc": attrs.get("decodefunc", ""),
+                "Attr_DecodeFunc": attrs.get("decodeFunc", ""),
 
                 "Prop_ValueType": props.get("valueType", ""),
                 "Prop_ReadWrite": props.get("readWrite", ""),

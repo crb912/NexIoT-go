@@ -1,3 +1,32 @@
+## Project Bootstrap Logic
+
+```text
+Bootstrap() Core Flow
+│
+├── 1. Parse command-line arguments (-p, -cd, -cf, -i, -r, -cp, etc.)
+│
+├── 2. Load local configuration (configuration.yaml) or fetch from Registry (Consul)
+│
+├── 3. Register service with Registry (Consul)
+│
+├── 4. Connect to EdgeX Core Services
+│        ├── core-metadata (Devices, Profiles, ProvisionWatchers)
+│        └── core-data / Message Bus (Event ingestion & publishing)
+│
+├── 5. Initialize internal caches (Devices, Profiles, ProvisionWatchers, etc.)
+│
+├── 6. Invoke driver.Initialize(sdk) ← Custom driver initialization logic
+│
+├── 7. Start REST API HTTP Server (Device command routing)
+│
+├── 8. Start AutoEvents engine (Automated scheduling/data collection)
+│
+├── 9. Invoke driver.Start() ← Custom driver post-initialization logic (New Version)
+│
+└── 10. Block and wait for shutdown signals (SIGTERM/SIGINT), then trigger driver.Stop()
+
+-------------------------------------------------------------------------
+
 ## Introduction to the `ProtocolDriver` Interface
 ```go
 type ProtocolDriver interface {
@@ -52,7 +81,7 @@ This is the most important entry point when writing a Driver. The roles of these
 #### Key Points to Note
 1. Blocking Issues: `Initialize `must never block. If you need to establish a potentially time-consuming network connection or start an infinite loop listening service (like TCP Listen) at startup, you must use the go keyword to start a new Goroutine to run in the background. If Initialize blocks, the entire Device Service startup process will freeze.
 2. Error Handling: If `Initialize` returns an `error`, `go-mod-bootstrap` assumes initialization failed and directly triggers `os.Exit` to terminate the entire Device Service process. Therefore, you should only return an error when a fatal, unrecoverable error occurs (like a missing critical certificate). If it is a temporary network disconnection, it is recommended to implement retry logic in a background Goroutine, while `Initialize` itself returns `nil`.
-3. Lifecycle Sequence: When the service starts, the SDK will first build local device and Profile caches before calling Initialize. Thus, at the moment `Initialize` runs, the Driver can use SDK APIs to query the existing device list (this is very useful for restoring previous connection states at the protocol layer).
+3. Lifecycle Sequence: When the service starts, the SDK will first build local device and Profile caches before calling `Initialize`. Thus, at the moment `Initialize` runs, the Driver can use SDK APIs to query the existing device list (this is very useful for restoring previous connection states at the protocol layer).
 
 --------------------------------------
 

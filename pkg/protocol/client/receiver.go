@@ -1,10 +1,10 @@
-package connector
+package client
 
 import (
 	"context"
 	"fmt"
-	"octopus-edge/pkg/protocol"
-	"octopus-edge/pkg/protocol/receiver"
+	"octopus-edge/pkg/protocol/adapter/http_receiver"
+	"octopus-edge/pkg/protocol/model"
 	"sync"
 	"time"
 )
@@ -14,10 +14,10 @@ type Receivers struct {
 	timeout         time.Duration
 	maxSize         int
 	Servers         []ReceiverAdapter
-	MergedAsyncData chan protocol.ReceiveEvent // Shared channel for all servers
+	MergedAsyncData chan model.ReceiveEvent // Shared channel for all servers
 }
 
-type ReceiveEvent = protocol.ReceiveEvent
+type ReceiveEvent = model.ReceiveEvent
 
 // AsyncData defines the unified structure for pushed data
 type AsyncData struct {
@@ -47,12 +47,12 @@ func NewReceivers(timeout time.Duration, maxSize int) *Receivers {
 		// Initialize an empty slice for servers.
 		Servers: make([]ReceiverAdapter, 0),
 		// Create a buffered channel.
-		MergedAsyncData: make(chan protocol.ReceiveEvent, maxSize),
+		MergedAsyncData: make(chan model.ReceiveEvent, maxSize),
 	}
 }
 
 func (rc *Receivers) RegisterHttpServer(host string, port uint16, urlHandle string, ch chan ReceiveEvent) {
-	server := receiver.NewHttpReceiver(host, port, urlHandle)
+	server := http_receiver.NewHttpReceiver(host, port, urlHandle)
 
 	// Override the server's AsyncData channel with the shared one
 	server.AsyncData = ch

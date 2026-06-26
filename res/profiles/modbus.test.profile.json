@@ -159,35 +159,35 @@
       "name": "mac_address",
       "isHidden": false,
       "description": "6-byte MAC address",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8023, "length": 3, "decodefunc": "decodeMACAddress" },
-      "properties": { "valueType": "String", "readWrite": "R" }
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8023, "length": 3, "decodeFunc": "decodeMACAddress", "encodeFunc": "encodeMACAddress"},
+      "properties": { "valueType": "String", "readWrite": "RW" }
     },
     {
       "name": "ip_address",
       "isHidden": false,
       "description": "Network IP address",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8026, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8026, "length": 2, "decodeFunc": "decodeIPv4Address" },
       "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.20" }
     },
     {
       "name": "gateway",
       "isHidden": false,
       "description": "Gateway IP address",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8028, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8028, "length": 2, "decodeFunc": "decodeIPv4Address" },
       "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.1" }
     },
     {
       "name": "subnet_mask",
       "isHidden": false,
       "description": "Subnet mask",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8030, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8030, "length": 2, "decodeFunc": "decodeIPv4Address" },
       "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "255.255.255.0" }
     },
     {
       "name": "dns",
       "isHidden": false,
       "description": "Network DNS",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8032, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8032, "length": 2, "decodeFunc": "decodeIPv4Address" },
       "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.1.1"}
     },
     {
@@ -201,14 +201,14 @@
       "name": "target_ip_address",
       "isHidden": false,
       "description": "Target server IP address",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8035, "length": 2, "decodefunc": "decodeIPv4Address" },
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8035, "length": 2, "decodeFunc": "decodeIPv4Address" },
       "properties": { "valueType": "String", "readWrite": "RW", "defaultValue": "192.168.0.100" }
     },
     {
       "name": "year",
       "isHidden": false,
       "description": "Year",
-      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8300, "length": 2, "decodefunc": "toUnit32"},
+      "attributes": { "primaryTable": "HOLDING_REGISTERS", "address": 8300, "length": 2, "decodeFunc": "toUint32", "encodeFunc": "toUint16Slice"},
       "properties": { "valueType": "Uint32", "readWrite": "RW", "minimum": "2000" }
     },
     {

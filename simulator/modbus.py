@@ -105,7 +105,7 @@ def populate_memory(profile_data, memory, overrides):
 
         wire_addr = attrs["address"] - 1
         default_val = overrides.get(name, resource.get("properties", {}).get("defaultValue"))
-        decode_func = attrs.get("decodefunc", "")
+        decode_func = attrs.get("decodeFunc", "")
         length = attrs.get("length", 1)
 
         if default_val is None:

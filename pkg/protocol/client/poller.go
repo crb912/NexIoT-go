@@ -1,15 +1,15 @@
 // Package connector manages IoT protocol clients/servers.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
-package connector
+package client
 
 import (
 	"errors"
 	"fmt"
 	"octopus-edge/pkg/cache"
-	"octopus-edge/pkg/parser"
-	"octopus-edge/pkg/protocol"
-	"octopus-edge/pkg/protocol/poller"
+	"octopus-edge/pkg/conv"
+	"octopus-edge/pkg/protocol/adapter/modbus"
+	"octopus-edge/pkg/protocol/model"
 	"sync"
 	"time"
 )
@@ -56,7 +56,7 @@ func NewPolls(opts ...Option) *Polls {
 
 // GetHandler returns an existing connection or creates a new one.
 func (p *Polls) GetHandler(pc *cache.ProtocolConfig) (ReadClient, error) {
-	protocol_, err := protocol.ValidateProtocol(pc.Name)
+	protocol_, err := model.ValidateProtocol(pc.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -119,21 +119,21 @@ func (p *Polls) addClient(key string, client ReadClient) {
 // newClient is a factory that returns the correct ReadClient
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newClient(endpoint string, protocolName protocol.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
+func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
 	switch protocolName {
-	case protocol.ModbusTCP:
-		return newModbusClient(endpoint, protocol.ModbusTCP, timeout, args)
-	case protocol.ModbusRTU:
+	case model.ModbusTCP:
+		return newModbusClient(endpoint, model.ModbusTCP, timeout, args)
+	case model.ModbusRTU:
 
-		return newModbusClient(endpoint, protocol.ModbusRTU, timeout, args)
+		return newModbusClient(endpoint, model.ModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
 }
 
 // newModbusClient constructs a ModbusClient from a generic args map.
-func newModbusClient(endpoint string, pt protocol.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*poller.ModbusClient, error) {
-	c := &poller.ModbusClient{
+func newModbusClient(endpoint string, pt model.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*modbus.ModbusClient, error) {
+	c := &modbus.ModbusClient{
 		EndPoint:     endpoint,
 		ProtocolType: pt,
 		Timeout:      defaultTimeout,
@@ -148,22 +148,22 @@ func newModbusClient(endpoint string, pt protocol.ProtocolType, defaultTimeout t
 	}
 
 	if v, ok := args["baud_rate"]; ok {
-		if u, ok := parser.ToUint(v); ok {
+		if u, ok := conv.ToUint(v); ok {
 			c.BaudRate = u
 		}
 	}
 	if v, ok := args["data_bits"]; ok {
-		if u, ok := parser.ToUint(v); ok {
+		if u, ok := conv.ToUint(v); ok {
 			c.DataBits = u
 		}
 	}
 	if v, ok := args["stop_bits"]; ok {
-		if u, ok := parser.ToUint(v); ok {
+		if u, ok := conv.ToUint(v); ok {
 			c.StopBits = u
 		}
 	}
 	if v, ok := args["parity"]; ok {
-		if u, ok := parser.ToUint(v); ok {
+		if u, ok := conv.ToUint(v); ok {
 			c.Parity = u
 		}
 	}

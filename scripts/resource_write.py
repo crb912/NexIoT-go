@@ -102,6 +102,19 @@ def build_system_time_payload(args) -> dict:
         "second": str(args.second if args.second is not None else now.second),
     }
 
+def build_system_time_payload_int(args) -> dict:
+    """Build payload from CLI args, falling back to current system time."""
+    now = datetime.now()
+
+    # Use native integer numeric type instead of string
+    return {
+        "year": args.year if args.year is not None else now.year,
+        "month": args.month if args.month is not None else now.month,
+        "day": args.day if args.day is not None else now.day,
+        "hour": args.hour if args.hour is not None else now.hour,
+        "minute": args.minute if args.minute is not None else now.minute,
+        "second": args.second if args.second is not None else now.second,
+    }
 
 def validate_ranges(payload: dict) -> list[str]:
     """Return list of validation errors."""

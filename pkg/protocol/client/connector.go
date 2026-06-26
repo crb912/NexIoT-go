@@ -1,9 +1,9 @@
-package connector
+package client
 
 import (
 	"fmt"
 	"octopus-edge/pkg/parser"
-	"octopus-edge/pkg/protocol"
+	"octopus-edge/pkg/protocol/model"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
@@ -17,14 +17,14 @@ type Session interface {
 
 // Reader defines the standard read interface for all protocol plugins.
 type Reader interface {
-	ReadSingle(point *protocol.Resource) error
-	ReadBatch(points []protocol.Resource) error
+	ReadSingle(point *model.Resource) error
+	ReadBatch(points []model.Resource) error
 }
 
 // Writer defines the standard write interface for all protocol plugins.
 type Writer interface {
-	WriteSingle(point *protocol.Resource) error
-	WriteBatch(points []protocol.Resource) error // 连续写 n 个点
+	WriteSingle(point *model.Resource) error
+	WriteBatch(points []model.Resource) error // 连续写 n 个点
 }
 
 // ReadClient embeds the Reader interface with lifecycle management.
@@ -54,14 +54,14 @@ type ReceiverAdapter interface {
 
 // HandleReadSingle processes a single read command.
 func HandleReadSingle(reader ReadClient, req sdkModels.CommandRequest) (*sdkModels.CommandValue, error) {
-	res := protocol.NewResource(req)
+	res := model.NewResource(req)
 	var err error
 	if err = reader.ReadSingle(&res); err != nil {
 		return nil, err
 	}
 
 	if res.Decoder != "" {
-		res.Value, err = parser.DecodeRawData(res.Decoder, res.Value)
+		res.Value, err = parser.DecodeRData(res.Decoder, res.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func HandleReadSingle(reader ReadClient, req sdkModels.CommandRequest) (*sdkMode
 
 // HandleReadBatch processes a batch read command.
 func HandleReadBatch(reader ReadClient, req []sdkModels.CommandRequest) ([]*sdkModels.CommandValue, error) {
-	resList := protocol.NewResourceN(req)
+	resList := model.NewResourceN(req)
 	var err error
 	if err = reader.ReadBatch(resList); err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func HandleReadBatch(reader ReadClient, req []sdkModels.CommandRequest) ([]*sdkM
 	cvList := make([]*sdkModels.CommandValue, 0, len(req))
 	for i := range resList {
 		if resList[i].Decoder != "" {
-			resList[i].Value, err = parser.DecodeRawData(resList[i].Decoder, resList[i].Value)
+			resList[i].Value, err = parser.DecodeRData(resList[i].Decoder, resList[i].Value)
 			if err != nil {
 				return cvList, fmt.Errorf("decode err, res: %s, decoder: %s, %v", resList[i].Name, resList[i].Decoder, err)
 			}
@@ -102,27 +102,38 @@ func HandleReadBatch(reader ReadClient, req []sdkModels.CommandRequest) ([]*sdkM
 }
 
 // HandleWriteSingle processes a single write command.
-func HandleWriteSingle(writer Writer, req sdkModels.CommandRequest, param *sdkModels.CommandValue) error {
-	res := protocol.NewResource(req)
+func HandleWriteSingle(writer Writer, req sdkModels.CommandRequest, param *sdkModels.CommandValue) (err error) {
+	res := model.NewResource(req)
 	res.Value = param.Value
+	if res.Encoder != "" {
+		res.Value, err = parser.EncodeWData(res.Decoder, param)
+		if err != nil {
+			return err
+		}
+	}
 
 	if err := writer.WriteSingle(&res); err != nil {
-		return fmt.Errorf("HandleWriteSingle: resource %s: %w", req.DeviceResourceName, err)
+		return fmt.Errorf("HandleWriteSingle err: resource=%s,val=%v: %w", req.DeviceResourceName, param, err)
 	}
 	return nil
 }
 
 // HandleWriteBatch processes a batch write command.
-func HandleWriteBatch(writer Writer, reqs []sdkModels.CommandRequest, params []*sdkModels.CommandValue) error {
-	resList := protocol.NewResourceN(reqs)
+func HandleWriteBatch(writer Writer, reqs []sdkModels.CommandRequest, params []*sdkModels.CommandValue) (err error) {
+	resList := model.NewResourceN(reqs)
+
 	for i := range resList {
-		if i < len(params) {
-			resList[i].Value = params[i].Value
+		resList[i].Value = params[i].Value
+		if resList[i].Encoder != "" {
+			resList[i].Value, err = parser.EncodeWData(resList[i].Encoder, params[i].Value)
+			if err != nil {
+				return fmt.Errorf("encode err, res: %s, value: %v, encoder: %s, %v", resList[i].Name, params[i].Value, resList[i].Encoder, err)
+			}
 		}
 	}
 
 	if err := writer.WriteBatch(resList); err != nil {
-		return fmt.Errorf("HandleWriteBatch: %w", err)
+		return fmt.Errorf("HandleWriteBatch err: %w", err)
 	}
 	return nil
 }

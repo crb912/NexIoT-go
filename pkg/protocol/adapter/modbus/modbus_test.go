@@ -1,10 +1,10 @@
 // Package poller provides unit tests for the Modbus protocol poller.
-package poller
+package modbus
 
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/protocol"
+	"octopus-edge/pkg/protocol/model"
 	"strings"
 	"testing"
 	"time"
@@ -135,18 +135,18 @@ var _ Client = (*mockModbusClient)(nil)
 func newMockedModbusClient(mock Client) *ModbusClient {
 	return &ModbusClient{
 		EndPoint:     "tcp://127.0.0.1:502",
-		ProtocolType: protocol.ModbusTCP,
+		ProtocolType: model.ModbusTCP,
 		Timeout:      1 * time.Second,
 		connected:    true,
 		client:       mock,
 	}
 }
 
-// newTestResource returns a *protocol.Resource for use in ReadSingle.
+// newTestResource returns a *protocoladapter.Resource for use in ReadSingle.
 // For ReadBatch, callers should dereference: *newTestResource(...).
 // Type is derived from primaryTable for sensible defaults.
-func newTestResource(addr float64, length uint16, primaryTable string) *protocol.Resource {
-	r := &protocol.Resource{
+func newTestResource(addr float64, length uint16, primaryTable string) *model.Resource {
+	r := &model.Resource{
 		Name:    fmt.Sprintf("res-%v", addr),
 		Address: addr,
 		Length:  length,
@@ -167,8 +167,8 @@ func newTestResource(addr float64, length uint16, primaryTable string) *protocol
 	return r
 }
 
-// newTestResourceWithValue returns a *protocol.Resource with a pre-set Value for write tests.
-func newTestResourceWithValue(addr float64, length uint16, primaryTable string, value any) *protocol.Resource {
+// newTestResourceWithValue returns a *protocoladapter.Resource with a pre-set Value for write tests.
+func newTestResourceWithValue(addr float64, length uint16, primaryTable string, value any) *model.Resource {
 	r := newTestResource(addr, length, primaryTable)
 	r.Value = value
 	return r
@@ -218,13 +218,13 @@ func TestCalculateBatchSpan(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		points  []protocol.Resource
+		points  []model.Resource
 		wantMin uint16
 		wantQty uint16
 	}{
 		{
 			name: "single point",
-			points: []protocol.Resource{
+			points: []model.Resource{
 				{Address: float64(10), Length: 2},
 			},
 			wantMin: 10,
@@ -232,7 +232,7 @@ func TestCalculateBatchSpan(t *testing.T) {
 		},
 		{
 			name: "contiguous points",
-			points: []protocol.Resource{
+			points: []model.Resource{
 				{Address: float64(1), Length: 1},
 				{Address: float64(2), Length: 1},
 				{Address: float64(3), Length: 1},
@@ -242,7 +242,7 @@ func TestCalculateBatchSpan(t *testing.T) {
 		},
 		{
 			name: "sparse points",
-			points: []protocol.Resource{
+			points: []model.Resource{
 				{Address: float64(5), Length: 1},
 				{Address: float64(1), Length: 2},
 				{Address: float64(9), Length: 1},
@@ -252,7 +252,7 @@ func TestCalculateBatchSpan(t *testing.T) {
 		},
 		{
 			name: "multi-length resources",
-			points: []protocol.Resource{
+			points: []model.Resource{
 				{Address: float64(100), Length: 4},
 				{Address: float64(104), Length: 2},
 			},
@@ -279,7 +279,7 @@ func TestCalculateBatchSpan(t *testing.T) {
 func TestCalculateBatchSpan_Empty(t *testing.T) {
 	t.Parallel()
 	// Degenerate case: empty input. minAddr stays at 0xFFFF, quantity is maxEnd - minAddr = 0 - 0xFFFF = 1 (underflow).
-	points := []protocol.Resource{}
+	points := []model.Resource{}
 	minAddr, quantity := calculateBatchSpan(points)
 	// Document current behavior — caller should guard against empty input.
 	t.Logf("calculateBatchSpan on empty: minAddr=%d (0x%04X), quantity=%d", minAddr, minAddr, quantity)
@@ -337,7 +337,7 @@ func TestExtractValue(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := extractValue(tt.rawData, tt.resType, tt.length)
+			got := extractRegisterValue(tt.rawData, tt.resType, tt.length)
 			if fmt.Sprintf("%v", got) != fmt.Sprintf("%v", tt.want) {
 				t.Errorf("extractValue() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
 			}
@@ -352,7 +352,7 @@ func TestExtractValue(t *testing.T) {
 func TestAssignResValues_Uint16(t *testing.T) {
 	t.Parallel()
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		{Address: float64(10), Length: 1},
 		{Address: float64(12), Length: 2},
 	}
@@ -374,7 +374,7 @@ func TestAssignResValues_Uint16(t *testing.T) {
 func TestAssignResValues_Bool(t *testing.T) {
 	t.Parallel()
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		{Address: float64(1), Length: 1},
 		{Address: float64(3), Length: 1},
 	}
@@ -393,7 +393,7 @@ func TestAssignResValues_Bool(t *testing.T) {
 func TestAssignResValues_OutOfBounds(t *testing.T) {
 	t.Parallel()
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		{Address: float64(1), Length: 100}, // offset + length > len(data)
 	}
 	data := []uint16{0x0001, 0x0002}
@@ -739,7 +739,7 @@ func TestReadSingle_InvalidAddressType_Panics(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	point := &protocol.Resource{
+	point := &model.Resource{
 		Name:    "bad-addr",
 		Address: true, // bool is not float64 — type assertion panics.
 		Length:  1,
@@ -783,7 +783,7 @@ func TestReadBatch_HoldingRegisters(t *testing.T) {
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"), // offset 0, len 1
 		*newTestResource(float64(3), 2, "HOLDING_REGISTERS"), // offset 2, len 2
 	}
@@ -824,7 +824,7 @@ func TestReadBatch_Coils(t *testing.T) {
 	mc := newMockedModbusClient(mock)
 
 	// 1-based addresses >= 1 to avoid underflow.
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResource(float64(1), 1, "COILS"), // offset 0
 		*newTestResource(float64(3), 1, "COILS"), // offset 2
 		*newTestResource(float64(5), 1, "COILS"), // offset 4
@@ -866,7 +866,7 @@ func TestReadBatch_DiscreteInputs(t *testing.T) {
 	mock := &mockModbusClient{readDiscretes: d}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResource(float64(1), 2, "DISCRETES"), // offset 0, len 2
 		*newTestResource(float64(3), 2, "DISCRETES"), // offset 2, len 2
 	}
@@ -904,7 +904,7 @@ func TestReadBatch_Error(t *testing.T) {
 	mock := &mockModbusClient{readRegsErr: deviceErr}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		*newTestResource(float64(2), 1, "HOLDING_REGISTERS"),
 	}
@@ -931,7 +931,7 @@ func TestReadBatch_MixedTypes_ReadsFirstTable(t *testing.T) {
 	mock := &mockModbusClient{readRegs: regs}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResource(float64(1), 1, "HOLDING_REGISTERS"),
 		*newTestResource(float64(2), 1, "COILS"), // COILS ignored; read as HOLDING_REGISTERS
 	}
@@ -1102,7 +1102,7 @@ func TestWriteBatch_HoldingRegisters(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResourceWithValue(float64(1), 1, "HOLDING_REGISTERS", uint16(0x10)),
 		*newTestResourceWithValue(float64(2), 1, "HOLDING_REGISTERS", uint16(0x20)),
 		*newTestResourceWithValue(float64(3), 1, "HOLDING_REGISTERS", uint16(0x30)),
@@ -1138,7 +1138,7 @@ func TestWriteBatch_SparseRegisters(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResourceWithValue(float64(10), 1, "HOLDING_REGISTERS", uint16(0xAA)),
 		*newTestResourceWithValue(float64(13), 1, "HOLDING_REGISTERS", uint16(0xDD)),
 	}
@@ -1174,7 +1174,7 @@ func TestWriteBatch_Coils(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResourceWithValue(float64(1), 1, "COILS", true),
 		*newTestResourceWithValue(float64(2), 1, "COILS", false),
 		*newTestResourceWithValue(float64(3), 1, "COILS", true),
@@ -1208,7 +1208,7 @@ func TestWriteBatch_Empty(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{}
+	points := []model.Resource{}
 	err := mc.WriteBatch(points)
 
 	if err == nil {
@@ -1226,7 +1226,7 @@ func TestWriteBatch_Error(t *testing.T) {
 	mock := &mockModbusClient{writeMultiRegErr: deviceErr}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResourceWithValue(float64(1), 1, "HOLDING_REGISTERS", uint16(9999)),
 	}
 	err := mc.WriteBatch(points)
@@ -1245,7 +1245,7 @@ func TestWriteBatch_DiscreteInputs_ReadOnly(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	points := []protocol.Resource{
+	points := []model.Resource{
 		*newTestResourceWithValue(float64(1), 1, "DISCRETES", true),
 	}
 	err := mc.WriteBatch(points)
