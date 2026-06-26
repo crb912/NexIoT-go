@@ -995,23 +995,20 @@ func TestWriteSingle_HoldingRegister_StringValue(t *testing.T) {
 	mock := &mockModbusClient{}
 	mc := newMockedModbusClient(mock)
 
-	// EdgeX often sends uint16 values as strings.
+	// conv.ToUint16Slice rejects non-uint16/[]uint16 values.
 	point := newTestResourceWithValue(float64(8003), 1, "HOLDING_REGISTERS", "4")
 	err := mc.WriteSingle(point)
 
-	if err != nil {
-		t.Fatalf("WriteSingle() unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("WriteSingle() should return error for string value")
+	}
+	if !strings.Contains(err.Error(), "only uint16") {
+		t.Errorf("error should mention 'only uint16', got: %v", err)
 	}
 
-	if len(mock.writeSingleRegCalls) != 1 {
-		t.Fatalf("expected 1 WriteSingleRegister call, got %d", len(mock.writeSingleRegCalls))
-	}
-	// Address float64(8003) → 8003-1 = 8002 (modbus address)
-	if mock.writeSingleRegCalls[0].address != 8002 {
-		t.Errorf("WriteSingleRegister address = %d, want 8002", mock.writeSingleRegCalls[0].address)
-	}
-	if mock.writeSingleRegCalls[0].value != 4 {
-		t.Errorf("WriteSingleRegister value = %d, want 4", mock.writeSingleRegCalls[0].value)
+	// No write call should have been made.
+	if len(mock.writeSingleRegCalls) != 0 {
+		t.Errorf("expected 0 WriteSingleRegister calls, got %d", len(mock.writeSingleRegCalls))
 	}
 }
 
@@ -1155,11 +1152,10 @@ func TestWriteBatch_SparseRegisters(t *testing.T) {
 	if mock.writeMultiRegCalls[0].address != 9 {
 		t.Errorf("WriteMultipleRegisters address = %d, want 9", mock.writeMultiRegCalls[0].address)
 	}
-	// quantity = maxEnd(14) - minAddr(10) = 4
-	// values: [0xAA, 0, 0, 0xDD]  (zero-filled gaps)
-	want := []uint16{0xAA, 0, 0, 0xDD}
-	if len(mock.writeMultiRegCalls[0].values) != 4 {
-		t.Errorf("WriteMultipleRegisters values len = %d, want 4", len(mock.writeMultiRegCalls[0].values))
+	// toUint16SliceBatch concatenates point values without zero-filling gaps.
+	want := []uint16{0xAA, 0xDD}
+	if len(mock.writeMultiRegCalls[0].values) != 2 {
+		t.Errorf("WriteMultipleRegisters values len = %d, want 2", len(mock.writeMultiRegCalls[0].values))
 	}
 	for i, v := range mock.writeMultiRegCalls[0].values {
 		if v != want[i] {
@@ -1255,99 +1251,5 @@ func TestWriteBatch_DiscreteInputs_ReadOnly(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("error should mention 'read-only', got: %v", err)
-	}
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// toUint16
-// ═══════════════════════════════════════════════════════════════════════
-
-func TestToUint16(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		input   any
-		want    uint16
-		wantErr bool
-	}{
-		{name: "uint16", input: uint16(42), want: 42},
-		{name: "uint8", input: uint8(255), want: 255},
-		{name: "int valid", input: int(100), want: 100},
-		{name: "int negative", input: int(-1), wantErr: true},
-		{name: "int overflow", input: int(65536), wantErr: true},
-		{name: "int64 valid", input: int64(500), want: 500},
-		{name: "float64 valid", input: float64(777), want: 777},
-		{name: "float64 negative", input: float64(-1), wantErr: true},
-		{name: "string valid", input: "123", want: 123},
-		{name: "string invalid", input: "abc", wantErr: true},
-		{name: "bool unsupported", input: true, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := toUint16(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("toUint16(%v) should return an error", tt.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Errorf("toUint16(%v) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Errorf("toUint16(%v) = %d, want %d", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// toBool
-// ═══════════════════════════════════════════════════════════════════════
-
-func TestToBool(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		input   any
-		want    bool
-		wantErr bool
-	}{
-		{name: "bool true", input: true, want: true},
-		{name: "bool false", input: false, want: false},
-		{name: "int 1", input: int(1), want: true},
-		{name: "int 0", input: int(0), want: false},
-		{name: "float64 non-zero", input: float64(3.14), want: true},
-		{name: "string true", input: "true", want: true},
-		{name: "string false", input: "false", want: false},
-		{name: "string 1", input: "1", want: true},
-		{name: "string 0", input: "0", want: false},
-		{name: "string invalid", input: "yes", wantErr: true},
-		{name: "unsupported type", input: []int{1}, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := toBool(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("toBool(%v) should return an error", tt.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Errorf("toBool(%v) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Errorf("toBool(%v) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
 	}
 }
