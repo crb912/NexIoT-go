@@ -24,6 +24,7 @@ Bootstrap() Core Flow
 ├── 9. Invoke driver.Start() ← Custom driver post-initialization logic (New Version)
 │
 └── 10. Block and wait for shutdown signals (SIGTERM/SIGINT), then trigger driver.Stop()
+```
 
 -------------------------------------------------------------------------
 
