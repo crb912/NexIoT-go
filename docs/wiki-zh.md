@@ -171,6 +171,8 @@ func (d *MyDriver) HandleReadCommands(deviceName string, protocols map[string]mo
 
 在 v2.3.0 中，这三个 `driver` 回调是通过 `core-metadata` 向 Device Service 发起 HTTP Callback 来触发的，不是由 Device Service 主动轮询。
 
+![device sdk callback flow](./images/device_sdk_callback_flow_zh.svg)
+
 ####  第一层：外部触发源（两条路径）
 
 **路径 A — 运行时操作：** 外部（UI、API 客户端、其他服务）通过调用 `core-metadata` 的 REST API 增删改设备时，`core-metadata` 会查找该设备所属的 Device Service，然后向它发出 HTTP 回调：

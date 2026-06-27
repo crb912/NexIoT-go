@@ -5,6 +5,7 @@ package snmp
 import (
 	"devices-iot-go/pkg/conv"
 	"devices-iot-go/pkg/model"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -40,6 +41,8 @@ var _ SnmpSession = (*gosnmpSession)(nil)
 // SnmpClient holds connection parameters and the underlying session.
 // It implements the protocol.RWClient interface (Session + Reader + Writer).
 type SnmpClient struct {
+	Target       string
+	Transport    string
 	EndPoint     string
 	ProtocolType model.ProtocolType
 	Timeout      time.Duration
@@ -56,9 +59,11 @@ type SnmpClient struct {
 // NewSnmpClient constructs an SnmpClient from the generic args map.
 // Supported args keys:
 //
-//	snmp_version     — "v1", "v2c" (default), "v3"
-//	community        — community string (default "public", v1/v2c only)
-//	port             — SNMP agent port (default 161)
+//	EndPoint         — eg. "udp://127.0.0.1:1610"
+//	Address          — SNMP agent host/IP (overrides the Target parameter, preferred)
+//	SnmpVersion     — "v1", "v2c" (default), "v3"
+//	Community        — Community string (default "public", v1/v2c only)
+//	Port             — SNMP agent port (default 161)
 //	user_name        — v3 security name
 //	auth_protocol    — v3 auth protocol: MD5, SHA, SHA256, SHA384, SHA512
 //	auth_passphrase  — v3 auth passphrase
@@ -70,15 +75,32 @@ func NewSnmpClient(endpoint string, pt model.ProtocolType, defaultTimeout time.D
 		ProtocolType: pt,
 		Timeout:      defaultTimeout,
 		Version:      gosnmp.Version2c,
+		Transport:    "udp",
 		Community:    "public",
 		Port:         161,
 	}
 
 	if args == nil {
-		return c, nil
+		return nil, errors.New("snmp client args is nil")
 	}
 
-	if v, ok := args["snmp_version"]; ok {
+	if v, ok := args["Community"]; ok {
+		c.Community = v
+	}
+	if v, ok := args["Address"]; ok && v != "" {
+		c.Target = v
+	}
+	if v, ok := args["Transport"]; ok && v != "" {
+		c.Transport = v
+	}
+
+	if v, ok := args["Port"]; ok {
+		if u, ok2 := conv.ToUint(v); ok2 {
+			c.Port = uint16(u)
+		}
+	}
+
+	if v, ok := args["SnmpVersion"]; ok {
 		switch v {
 		case "v1":
 			c.Version = gosnmp.Version1
@@ -89,31 +111,21 @@ func NewSnmpClient(endpoint string, pt model.ProtocolType, defaultTimeout time.D
 		}
 	}
 
-	if v, ok := args["community"]; ok {
-		c.Community = v
-	}
-
-	if v, ok := args["port"]; ok {
-		if u, ok2 := conv.ToUint(v); ok2 {
-			c.Port = uint16(u)
-		}
-	}
-
 	if c.Version == gosnmp.Version3 {
 		c.V3Params = &gosnmp.UsmSecurityParameters{}
-		if v, ok := args["user_name"]; ok {
+		if v, ok := args["UserName"]; ok {
 			c.V3Params.UserName = v
 		}
-		if v, ok := args["auth_protocol"]; ok {
+		if v, ok := args["AuthProtocol"]; ok {
 			c.V3Params.AuthenticationProtocol = parseAuthProtocol(v)
 		}
-		if v, ok := args["auth_passphrase"]; ok {
+		if v, ok := args["AuthPassphrase"]; ok {
 			c.V3Params.AuthenticationPassphrase = v
 		}
-		if v, ok := args["priv_protocol"]; ok {
+		if v, ok := args["PrivProtocol"]; ok {
 			c.V3Params.PrivacyProtocol = parsePrivProtocol(v)
 		}
-		if v, ok := args["priv_passphrase"]; ok {
+		if v, ok := args["PrivPassphrase"]; ok {
 			c.V3Params.PrivacyPassphrase = v
 		}
 	}
@@ -123,6 +135,7 @@ func NewSnmpClient(endpoint string, pt model.ProtocolType, defaultTimeout time.D
 
 // Connect opens the SNMP connection.
 func (s *SnmpClient) Connect() error {
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -132,10 +145,12 @@ func (s *SnmpClient) Connect() error {
 			return err
 		}
 		s.client = client
+	} else if s.connected {
+		return nil
 	}
 
 	if err := s.client.Connect(); err != nil {
-		return fmt.Errorf("SNMP connect to %s:%d: %w", s.EndPoint, s.Port, err)
+		return fmt.Errorf("SNMP connect to %s:%d: %w", s.Target, s.Port, err)
 	}
 	s.connected = true
 	return nil
@@ -143,9 +158,6 @@ func (s *SnmpClient) Connect() error {
 
 // Disconnect closes the SNMP connection.
 func (s *SnmpClient) Disconnect() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.client == nil {
 		s.connected = false
 		return nil
@@ -153,28 +165,11 @@ func (s *SnmpClient) Disconnect() error {
 
 	if err := s.client.Close(); err != nil {
 		s.connected = false
+		s.client = nil
 		return fmt.Errorf("SNMP disconnect: %w", err)
 	}
 	s.connected = false
 	return nil
-}
-
-// IsConnected checks whether the SNMP session is alive.
-func (s *SnmpClient) IsConnected() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.client == nil || !s.connected {
-		return false
-	}
-
-	// Health check: try Get on sysDescr.0 (standard OID).
-	_, err := s.client.Get([]string{"1.3.6.1.2.1.1.1.0"})
-	if err != nil {
-		s.connected = false
-		return false
-	}
-	return true
 }
 
 // ReadSingle reads a single SNMP OID.
@@ -186,6 +181,7 @@ func (s *SnmpClient) ReadSingle(res *model.Resource) error {
 
 	packet, err := s.client.Get([]string{oid})
 	if err != nil {
+		s.connected = false
 		return fmt.Errorf("SNMP Get %s: %w", oid, err)
 	}
 	if len(packet.Variables) == 0 {
@@ -193,7 +189,11 @@ func (s *SnmpClient) ReadSingle(res *model.Resource) error {
 	}
 
 	pdu := packet.Variables[0]
-	res.Value = conv.SnmpPDUValueToGo(pdu.Type, pdu.Value)
+	val, err := conv.ValueToType(pdu.Value, res.Type)
+	if err != nil {
+		return fmt.Errorf("SNMP Get %s: %w", oid, err)
+	}
+	res.Value = val
 	return nil
 }
 
@@ -224,7 +224,11 @@ func (s *SnmpClient) ReadBatch(points []model.Resource) error {
 		if !found {
 			continue
 		}
-		points[idx].Value = conv.SnmpPDUValueToGo(pdu.Type, pdu.Value)
+		val, err := conv.ValueToType(pdu.Value, points[idx].Type)
+		if err != nil {
+			return fmt.Errorf("SNMP Get batch %s: %w", pdu.Name, err)
+		}
+		points[idx].Value = val
 	}
 	return nil
 }
@@ -236,7 +240,7 @@ func (s *SnmpClient) WriteSingle(res *model.Resource) error {
 		return fmt.Errorf("WriteSingle %s: %w", res.Name, err)
 	}
 
-	asn1Type, value, err := conv.GoValueToSnmpPDU(res.Value)
+	asn1Type, value, err := goValueToSnmpPDU(res.Value)
 	if err != nil {
 		return fmt.Errorf("WriteSingle %s: %w", res.Name, err)
 	}
@@ -267,7 +271,7 @@ func (s *SnmpClient) WriteBatch(points []model.Resource) error {
 			return fmt.Errorf("WriteBatch %s: %w", points[i].Name, err)
 		}
 
-		asn1Type, value, err := conv.GoValueToSnmpPDU(points[i].Value)
+		asn1Type, value, err := goValueToSnmpPDU(points[i].Value)
 		if err != nil {
 			return fmt.Errorf("WriteBatch %s: %w", points[i].Name, err)
 		}
@@ -289,8 +293,9 @@ func (s *SnmpClient) WriteBatch(points []model.Resource) error {
 // newSession creates and configures the underlying gosnmp.GoSNMP instance.
 func (s *SnmpClient) newSession() (SnmpSession, error) {
 	g := &gosnmp.GoSNMP{
-		Target:    s.EndPoint,
+		Target:    s.Target,
 		Port:      s.Port,
+		Transport: s.Transport,
 		Version:   s.Version,
 		Timeout:   s.Timeout,
 		Retries:   3,
@@ -356,5 +361,39 @@ func parsePrivProtocol(name string) gosnmp.SnmpV3PrivProtocol {
 		return gosnmp.AES256C
 	default:
 		return gosnmp.AES256
+	}
+}
+
+// goValueToSnmpPDU maps a native Go value to the appropriate
+// ASN.1 type and value pair for an SNMP SET operation.
+func goValueToSnmpPDU(v interface{}) (gosnmp.Asn1BER, interface{}, error) {
+	switch val := v.(type) {
+	case int:
+		return gosnmp.Integer, val, nil
+	case int32:
+		return gosnmp.Integer, int(val), nil
+	case int64:
+		return gosnmp.Counter64, val, nil
+	case uint:
+		return gosnmp.Gauge32, uint32(val), nil
+	case uint32:
+		return gosnmp.Gauge32, val, nil
+	case uint64:
+		return gosnmp.Counter64, val, nil
+	case float32:
+		return gosnmp.OpaqueFloat, val, nil
+	case float64:
+		return gosnmp.OpaqueDouble, val, nil
+	case string:
+		return gosnmp.OctetString, []byte(val), nil
+	case []byte:
+		return gosnmp.OctetString, val, nil
+	case bool:
+		if val {
+			return gosnmp.Integer, 1, nil
+		}
+		return gosnmp.Integer, 0, nil
+	default:
+		return gosnmp.OctetString, []byte(fmt.Sprintf("%v", v)), nil
 	}
 }

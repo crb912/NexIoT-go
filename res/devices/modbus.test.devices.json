@@ -10,7 +10,7 @@
     ],
     "protocols": {
       "modbus-tcp": {
-        "enabled": "true",
+        "Enabled": "true",
         "Address": "0.0.0.0",
         "Port": "5020",
         "UnitID": "1",
@@ -19,7 +19,7 @@
         "IdleTimeout": "5"
       },
       "modbus-rtu": {
-        "enabled": "false",
+        "Enabled": "false",
         "Address": "/tmp/slave",
         "UnitID": "1",
         "Endpoint": "rtu:///tmp/slave",

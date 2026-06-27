@@ -1,0 +1,32 @@
+[[DeviceList]]
+Name = "SNMP-TCP-trendnet01"
+ProfileName = "Test-Trendnet-Profile"
+Description = "Switch SNMP service interface"
+Labels = [ "device-snmp-switch-example" ]
+
+[DeviceList.Protocols]
+[DeviceList.Protocols.snmp]
+Enabled = "true"
+Endpoint = "udp://127.0.0.1:1610"
+Address = "127.0.0.1"
+Port = "1610"
+Transport = "udp"
+SnmpVersion = "v2c"
+Community = "public"
+Timeout = "5"
+IdleTimeout = "5"
+
+[[DeviceList.AutoEvents]]
+Interval = "50s"
+OnChange = true
+SourceName = "MacAddress"
+
+[[DeviceList.AutoEvents]]
+Interval = "50s"
+OnChange = true
+SourceName = "Firmware"
+
+[[DeviceList.AutoEvents]]
+Interval = "55s"
+OnChange = false
+SourceName = "Uptime"

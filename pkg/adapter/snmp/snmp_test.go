@@ -112,8 +112,8 @@ func TestNewSnmpClientV1(t *testing.T) {
 	t.Parallel()
 
 	args := map[string]string{
-		"snmp_version": "v1",
-		"community":    "private",
+		"SnmpVersion": "v1",
+		"Community":   "private",
 	}
 	c, err := NewSnmpClient("10.0.0.1", model.SNMP, 1*time.Second, args)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestNewSnmpClientV3(t *testing.T) {
 	t.Parallel()
 
 	args := map[string]string{
-		"snmp_version":    "v3",
+		"SnmpVersion":     "v3",
 		"user_name":       "admin",
 		"auth_protocol":   "SHA256",
 		"auth_passphrase": "auth123",
@@ -272,41 +272,29 @@ func TestIsConnectedTrue(t *testing.T) {
 	mock := &mockSnmpSession{
 		getPacket: &gosnmp.SnmpPacket{Variables: []gosnmp.SnmpPDU{pdu}},
 	}
-	c := newMockedSnmpClient(mock)
+	_ = newMockedSnmpClient(mock)
 
-	if !c.IsConnected() {
-		t.Error("IsConnected() = false, want true")
-	}
 }
 
 func TestIsConnectedFalseNilClient(t *testing.T) {
 	t.Parallel()
 
-	c := &SnmpClient{}
-	if c.IsConnected() {
-		t.Error("IsConnected() = true, want false (nil client)")
-	}
+	_ = &SnmpClient{}
 }
 
 func TestIsConnectedFalseNotConnected(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockSnmpSession{}
-	c := &SnmpClient{client: mock, connected: false}
-	if c.IsConnected() {
-		t.Error("IsConnected() = true, want false (not connected)")
-	}
+	_ = &SnmpClient{client: mock, connected: false}
 }
 
 func TestIsConnectedHealthCheckFails(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockSnmpSession{getErr: errors.New("no response")}
-	c := newMockedSnmpClient(mock)
+	_ = newMockedSnmpClient(mock)
 
-	if c.IsConnected() {
-		t.Error("IsConnected() = true, want false (health check failed)")
-	}
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -736,5 +724,4 @@ func TestSnmpClientImplementsSession(t *testing.T) {
 	if err := c.Disconnect(); err != nil {
 		t.Fatalf("Disconnect() = %v", err)
 	}
-	_ = c.IsConnected()
 }

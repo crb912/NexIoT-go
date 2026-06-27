@@ -44,7 +44,7 @@ func NewPolls(opts ...Option) *Polls {
 	p := &Polls{
 		clients: make(map[string]ReadClient),
 		timeout: 5 * time.Second, // Default timeout
-		maxSize: 100,             // Default max connections
+		maxSize: 400,             // Default max connections
 	}
 
 	for _, opt := range opts {
@@ -60,22 +60,9 @@ func (p *Polls) GetHandler(pc *model.ProtocolConfig) (ReadClient, error) {
 		return nil, err
 	}
 	endpoint := pc.GetEndpoint()
-	// Fast path: return existing healthy connection without a write lock.
-	p.mu.RLock()
+
 	protocolAdapter, exists := p.clients[endpoint]
-	p.mu.RUnlock()
-
-	if exists && protocolAdapter.IsConnected() {
-		return protocolAdapter, nil
-	}
-
-	// Slow path: create a new connection under a write lock.
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Double-check after acquiring the write lock.
-	protocolAdapter, exists = p.clients[endpoint]
-	if exists && protocolAdapter.IsConnected() {
+	if exists {
 		return protocolAdapter, nil
 	}
 
@@ -110,9 +97,13 @@ func (p *Polls) DisconnectAll() {
 }
 
 // addClient stores a protocol under the given key.
-// Caller must hold p.mu write lock.
 func (p *Polls) addClient(key string, client ReadClient) {
 	p.clients[key] = client
+}
+
+// removeClient deletes a protocol under the given key.
+func (p *Polls) removeClient(key string) {
+	delete(p.clients, key)
 }
 
 // newClient is a factory that returns the correct RWClient

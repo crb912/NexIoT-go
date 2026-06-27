@@ -146,15 +146,16 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			res = append(res, cv)
 			cd.readCommandsExecuted.Inc(1)
 			cd.lc.Debugf("@read ok: dev %s, res %s, val %v ", deviceName, cv.DeviceResourceName, cv.Value)
+		} else {
+			cvList, err := protocol.HandleReadBatch(reader, reqs)
+			if err != nil {
+				cd.lc.Errorf("@read batch failed: dev %s, err %v", deviceName, err)
+			}
+			res = append(res, cvList...)
+			cd.readCommandsExecuted.Inc(1)
+			cd.lc.Debugf("@read batch ok: dev %s ", deviceName)
 		}
 
-		cvList, err := protocol.HandleReadBatch(reader, reqs)
-		if err != nil {
-			cd.lc.Errorf("@read batch failed: dev %s, err %v", deviceName, err)
-		}
-		res = append(res, cvList...)
-		cd.readCommandsExecuted.Inc(1)
-		cd.lc.Debugf("@read batch ok: dev %s ", deviceName)
 	}
 	return
 }
@@ -202,21 +203,21 @@ func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (cd *CompositeDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	cd.lc.Debugf("a new Device is added: %s", deviceName)
+	cd.lc.Infof("Device added: %s", deviceName)
 	return nil
 }
 
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
 func (cd *CompositeDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	cd.lc.Debugf("Device %s is updated", deviceName)
+	cd.lc.Infof("Device updated: %s", deviceName)
 	return nil
 }
 
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (cd *CompositeDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
-	cd.lc.Debugf("Device %s is removed", deviceName)
+	cd.lc.Infof("Device removed: %s", deviceName)
 	return nil
 }
 

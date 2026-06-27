@@ -75,7 +75,7 @@ func RemoveProtocolConfig(deviceName string, protocolName string) {
 
 // IsDisabled checks if the protocol is disabled.
 func (a *ProtocolConfig) IsDisabled() bool {
-	v, ok := a.rawProperties["enabled"]
+	v, ok := a.rawProperties["Enabled"]
 	return ok && v == "false"
 }
 

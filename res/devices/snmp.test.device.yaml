@@ -1,24 +1,33 @@
 # Pre-define Devices
-# NOTE: You will need to modify the Address to a DNS or named resource potentially.
-#       Port 161 is the default SNMP provider port.
+# FBI Warning: The Edge SDK v2.3 does not natively support the YAML format for device configuration.
+#   - You should prioritize using **JSON** or **TOML** formats instead.
+#   - However, you can still load YAML files correctly by using the 'python scripts/devices_add.py' script.
+
+
 deviceList:
-  - name: "snmp-trendnet01"
+  - name: "SNMP-TCP-trendnet01"
     profileName: "Test-Trendnet-Profile"
     description: "Switch SNMP service interface"
     labels: [ "device-snmp-switch-example" ]
     protocols:
-      TCP:
-        Address: "127.0.0.1"
-        Port: "1610"
+      snmp:
+          Enabled: "true"
+          Endpoint: "udp://127.0.0.1:1610"
+          Address: "127.0.0.1"
+          Port: "1610"
+          Transport: "udp"
+          SnmpVersion: "v2c"
+          Community: "public"
+          Timeout: "5"
+          IdleTimeout: "5"
+
     autoEvents:
-      - interval: "10s"
+      - interval: "50s"
         onChange: true
         sourceName: "MacAddress"
-
-      - interval: "15s"
+      - interval: "55s"
         onChange: true
         sourceName: "Firmware"
-
-      - interval: "5s"
+      - interval: "50s"
         onChange: false
         sourceName: "Uptime"

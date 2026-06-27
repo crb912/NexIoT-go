@@ -175,6 +175,8 @@ func (d *MyDriver) HandleReadCommands(deviceName string, protocols map[string]mo
 
 In v2.3.0, these three `driver` callbacks are triggered by `core-metadata` sending HTTP Callbacks to the Device Service, rather than the Device Service actively polling.
 
+![device sdk callback flow](./images/device_sdk_callback_flow.svg)
+
 #### Layer 1: External Trigger Sources (Two Paths)
 
 **Path A — Runtime Operations**: When external entities (UI, API clients, other services) add, delete, or modify devices by calling the `core-metadata` REST API, `core-metadata` finds the Device Service that the device belongs to and sends an HTTP callback to it:

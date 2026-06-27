@@ -12,7 +12,6 @@ import (
 type Session interface {
 	Connect() error
 	Disconnect() error
-	IsConnected() bool
 }
 
 // Reader defines the standard read interface for all protocol plugins.

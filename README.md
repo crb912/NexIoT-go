@@ -15,6 +15,8 @@ Key Features:
   - [Verification and Test Commands](#verification-and-test-commands)
 - [System Architecture](#system-architecture)
 - [Configuration Guide](#configuration-guide)
+  - [How to Configure Device and Profiles](#how-to-configure-device-and-profiles)
+  - [Load Configs with Scripts](#load-configs-with-scripts)
 - [Documentation](#documentation)
   - [Developer Wiki (English)](docs/wiki-en.md)
   - [开发者 Wiki (中文)](docs/wiki-zh.md)
@@ -70,13 +72,16 @@ Check the device service has loaded the default test (Modbus) device.
 | **Description** | **Command** |
 |:---|:---|
 | Verify the backend EdgeX service API | `curl http://localhost:59880/api/v2/ping`|
-| Verify pre-defined devices<br>*(Note: You can replace `*-test-device` with your actual device)* | `curlhttp://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device`|
+| Verify pre-defined devices<br>*(Note: You can replace `*-test-device` with your actual device)* | `curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device`|
 | View pre-defined profile | `curl http://localhost:59881/api/v2/deviceprofile/name/Test-Device-Modbus-Profile`|
 | View pre-defined device resource<br>*(Note: `isHidden: false`)* | `curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/ip_address`|
 | View log (last 20 lines) | `docker logs edgex-core-command --tail 20`|
 | Check the latest events  | `curl http://localhost:59880/api/v2/event/device/name/Modbus-TCP-RTU-test-device?limit=5` |
 | Trigger a read command  <br> Assuming the device simulator is already running (python3 ./simulator/modbus.py). | `curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/Battery-Config`<br>`curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/System-Time` <br> or `python3 ./scripts/resource_read.py` |
 | Trigger a write command  | `python3 ./scripts/resource_write.py |
+
+
+- Test SMNP: `curl http://localhost:59882/api/v2/device/name/SNMP-TCP-trendnet01/MacAddress`
 
 ## System Architecture
 
@@ -161,7 +166,14 @@ v2 only supports **YAML** or **JSON** format for device profile configuration fi
 
 To make configuration files easier to read and deploy, **using custom XLSX or CSV formats is a very good choice**. Although you can implement custom parsing logic directly in the project code, I strongly advise against it. Instead, you should convert the custom formats (like XLSX or CSV) into project-compatible JSON or YAML formats using a Python script or a standalone Go binary. **Pre-compiling configurations before the program starts is much better than parsing them at runtime**. This approach minimizes project dependencies and keeps the project code simple.
 
-### Update Config
+### Load Configs with Scripts
+
+| Scenario | Auto-load | via Script |
+| ---- | ---- | ---- |
+| Auto-load devices on first deployment | ✅ Just place files under `res/devices` | Not necesssary |
+| Dynamically add new devices while service is running | ❌  Service restart required to read new files |  ✅ `python3 ./scripts/devices_add.py` |
+| Directly edit config files of existing devices | ❌ File changes will be ignored by program | ✅  `python3 ./scripts/devices_update.py` | |
+
 
 ```bash
 cd scripts

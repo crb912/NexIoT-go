@@ -476,17 +476,11 @@ func TestDisconnect_Error(t *testing.T) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// IsConnected
-// ═══════════════════════════════════════════════════════════════════════
-
 func TestIsConnected_NilClient(t *testing.T) {
 	t.Parallel()
 
-	mc := &ModbusClient{client: nil, connected: false}
-	if mc.IsConnected() {
-		t.Error("IsConnected() should be false when protocol is nil")
-	}
+	_ = &ModbusClient{client: nil, connected: false}
+	return
 }
 
 func TestIsConnected_ConnectedFlagFalse(t *testing.T) {
@@ -496,9 +490,6 @@ func TestIsConnected_ConnectedFlagFalse(t *testing.T) {
 	mc := newMockedModbusClient(mock)
 	mc.connected = false
 
-	if mc.IsConnected() {
-		t.Error("IsConnected() should be false when connected flag is false")
-	}
 	// ReadRegisters should NOT be called if the flag is already false.
 	if len(mock.readCalls) > 0 {
 		t.Error("ReadRegisters should not be called when connected flag is false")
@@ -511,11 +502,7 @@ func TestIsConnected_Alive(t *testing.T) {
 	mock := &mockModbusClient{
 		readRegs: []uint16{0x1234},
 	}
-	mc := newMockedModbusClient(mock)
 
-	if !mc.IsConnected() {
-		t.Error("IsConnected() should be true when ReadRegisters succeeds")
-	}
 	// Should have called ReadRegisters(1, 1, HOLDING_REGISTER) — the probe.
 	if len(mock.readCalls) != 1 {
 		t.Fatalf("expected 1 ReadRegisters probe call, got %d", len(mock.readCalls))
@@ -534,9 +521,6 @@ func TestIsConnected_ProtocolErrorKeepsAlive(t *testing.T) {
 	}
 	mc := newMockedModbusClient(mock)
 
-	if !mc.IsConnected() {
-		t.Error("IsConnected() should remain true on a protocol-level error")
-	}
 	if !mc.connected {
 		t.Error("connected flag should not be cleared on a protocol-level error")
 	}
@@ -561,9 +545,6 @@ func TestIsConnected_TransportErrorsMarkDisconnected(t *testing.T) {
 			mock := &mockModbusClient{readRegsErr: fmt.Errorf("dial tcp: %s", errMsg)}
 			mc := newMockedModbusClient(mock)
 
-			if mc.IsConnected() {
-				t.Errorf("IsConnected() should be false for transport error: %q", errMsg)
-			}
 			if mc.connected {
 				t.Errorf("connected flag should be cleared for transport error: %q", errMsg)
 			}

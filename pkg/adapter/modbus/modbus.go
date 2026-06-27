@@ -5,7 +5,6 @@ import (
 	"devices-iot-go/pkg/model"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -127,36 +126,6 @@ func (m *ModbusClient) Disconnect() error {
 	}
 
 	return nil
-}
-
-// IsConnected checks if the protocol is still connected.
-func (m *ModbusClient) IsConnected() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.client == nil || !m.connected {
-		return false
-	}
-
-	_, err := m.client.ReadRegisters(1, 1, modbus.HOLDING_REGISTER)
-	if err != nil {
-		errStr := err.Error()
-		transportErrors := []string{
-			"connection refused",
-			"broken pipe",
-			"closed network",
-			"no such file or directory",
-			"no such device",
-		}
-		for _, te := range transportErrors {
-			if strings.Contains(errStr, te) {
-				m.connected = false
-				return false
-			}
-		}
-	}
-
-	return true
 }
 
 // ReadSingle reads one Modbus resource.
