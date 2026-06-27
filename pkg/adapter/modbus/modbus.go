@@ -1,10 +1,10 @@
 package modbus
 
 import (
+	"devices-iot-go/pkg/conv"
+	"devices-iot-go/pkg/model"
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/conv"
-	"octopus-edge/pkg/model"
 	"strings"
 	"sync"
 	"time"

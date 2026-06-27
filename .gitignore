@@ -33,3 +33,4 @@ go.work.sum
 
 # DeepSeek TUI memory
 .mem/
+.codewhale/

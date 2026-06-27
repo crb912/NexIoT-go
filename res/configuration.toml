@@ -43,7 +43,7 @@ Host = "172.17.0.1"
 #Host = "127.0.0.1"
 Port = 59999 # Device serivce are assigned the 599xx range
 ServerBindAddr = ""  # blank value defaults to Service.Host value
-StartupMsg = "octopus-edge started"
+StartupMsg = "devices-iot-go started"
 # MaxRequestSize limit the request body size in kilobyte of put command
 MaxRequestSize = 0 # value 0 unlimit the request size.
 RequestTimeout = "20s"
@@ -88,7 +88,7 @@ SubscribeTopic = 'edgex/events/app/#'
   [MessageQueue.Optional]
   # Default MQTT Specific options that need to be here to enable environment variable overrides of them
   # Client Identifiers
-  ClientId = "octopus-edge"
+  ClientId = "devices-iot-go"
   # Connection information
   Qos = "0" # Quality of Sevice values are 0 (At most once), 1 (At least once) or 2 (Exactly once)
   KeepAlive = "10" # Seconds (must be 2 or greater)
@@ -99,7 +99,7 @@ SubscribeTopic = 'edgex/events/app/#'
 
   [MessageQueue.Topics]
   # subscribing for inbound command requests
-  CommandRequestTopic = "edgex/device/command/request/octopus-edge/#"
+  CommandRequestTopic = "edgex/device/command/request/devices-iot-go/#"
   # publishing outbound command responses; <device-service>/<device-name>/<command-name>/<method> will be added to this publish topic prefix
   CommandResponseTopicPrefix = "edgex/device/command/response"
 

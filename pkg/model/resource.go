@@ -1,19 +1,9 @@
 package model
 
 import (
-	"errors"
 	"time"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-)
-
-type ProtocolType string
-
-const (
-	MQTT      ProtocolType = "mqtt"
-	ModbusTCP ProtocolType = "modbus-tcp"
-	ModbusRTU ProtocolType = "modbus-rtu"
-	Unknown   ProtocolType = "unknown"
 )
 
 // Resource is the generic device resource definition for all protocols
@@ -73,17 +63,4 @@ func NewResourceN(deviceResList []sdkModels.CommandRequest) []Resource {
 		res[i] = NewResource(deviceRes)
 	}
 	return res
-}
-
-func ValidateProtocol(protocolName string) (ProtocolType, error) {
-	switch protocolName {
-	case "modbus-tcp":
-		return ModbusTCP, nil
-	case "modbus-rtu":
-		return ModbusRTU, nil
-	case "mqtt":
-		return MQTT, nil
-	default:
-		return Unknown, errors.New("not support protocol type")
-	}
 }

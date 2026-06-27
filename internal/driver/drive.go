@@ -3,10 +3,10 @@ package driver
 
 import (
 	"context"
+	"devices-iot-go/pkg/model"
+	"devices-iot-go/pkg/protocol"
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/model"
-	"octopus-edge/pkg/protocol"
 	"reflect"
 	"time"
 

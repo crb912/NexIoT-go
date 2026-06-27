@@ -2,9 +2,9 @@ package protocol
 
 import (
 	"context"
+	"devices-iot-go/pkg/adapter/listener_http"
+	"devices-iot-go/pkg/model"
 	"fmt"
-	"octopus-edge/pkg/adapter/listener_http"
-	"octopus-edge/pkg/model"
 	"sync"
 	"time"
 )

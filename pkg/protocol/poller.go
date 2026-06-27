@@ -4,10 +4,11 @@
 package protocol
 
 import (
+	"devices-iot-go/pkg/adapter/modbus"
+	"devices-iot-go/pkg/adapter/snmp"
+	"devices-iot-go/pkg/model"
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/adapter/modbus"
-	"octopus-edge/pkg/model"
 	"sync"
 	"time"
 )
@@ -122,8 +123,9 @@ func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, time
 	case model.ModbusTCP:
 		return modbus.NewModbusClient(endpoint, model.ModbusTCP, timeout, args)
 	case model.ModbusRTU:
-
 		return modbus.NewModbusClient(endpoint, model.ModbusRTU, timeout, args)
+	case model.SNMP:
+		return snmp.NewSnmpClient(endpoint, model.SNMP, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}

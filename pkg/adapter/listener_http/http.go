@@ -2,12 +2,12 @@ package listener_http
 
 import (
 	"context"
+	"devices-iot-go/pkg/model"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"octopus-edge/pkg/model"
 	"time" // Imported for Shutdown timeout
 )
 

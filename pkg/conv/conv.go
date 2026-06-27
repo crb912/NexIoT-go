@@ -1,11 +1,14 @@
+// Package conv provides type conversion helpers used across protocol adapters.
 package conv
 
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/gosnmp/gosnmp"
 )
 
-// ToBool only accept bool
+// ToBool only accept bool value.
 func ToBool(v any) (bool, error) {
 	b, ok := v.(bool)
 	if !ok {
@@ -14,7 +17,7 @@ func ToBool(v any) (bool, error) {
 	return b, nil
 }
 
-// ToUint16 only accept uint16
+// ToUint16 only accept uint16 value.
 func ToUint16(v any) (uint16, error) {
 	u, ok := v.(uint16)
 	if !ok {
@@ -46,8 +49,8 @@ func ToUint(v interface{}) (uint, bool) {
 	return 0, false
 }
 
-// ToBoolSlice converts input to []bool for modbus coil write
-// support native bool or []bool input
+// ToBoolSlice converts input to []bool for modbus coil write.
+// Supports native bool or []bool input.
 func ToBoolSlice(v any) ([]bool, error) {
 	if v == nil {
 		return nil, fmt.Errorf("only bool, []bool supported, got nil")
@@ -62,8 +65,8 @@ func ToBoolSlice(v any) ([]bool, error) {
 	}
 }
 
-// ToUint16Slice convert input to []uint16 for modbus register write
-// support uint16 or []uint16 input
+// ToUint16Slice converts input to []uint16 for modbus register write.
+// Supports uint16 or []uint16 input.
 func ToUint16Slice(v any) ([]uint16, error) {
 	if v == nil {
 		return nil, fmt.Errorf("only uint16, []uint16 supported, got nil")
@@ -74,6 +77,54 @@ func ToUint16Slice(v any) ([]uint16, error) {
 	case []uint16:
 		return val, nil
 	default:
-		return nil, fmt.Errorf("only uint16, []uint16 or supported, got %s", reflect.TypeOf(v))
+		return nil, fmt.Errorf("only uint16, []uint16 supported, got %s", reflect.TypeOf(v))
+	}
+}
+
+// ─── SNMP type conversion helpers ───────────────────────────────────────
+
+// SnmpPDUValueToGo converts a gosnmp PDU value to a native Go type.
+// gosnmp already returns native Go types for most ASN.1 types;
+// this helper converts []byte OctetString to string for convenience.
+func SnmpPDUValueToGo(asn1Type gosnmp.Asn1BER, value interface{}) interface{} {
+	if asn1Type == gosnmp.OctetString {
+		if b, ok := value.([]byte); ok {
+			return string(b)
+		}
+	}
+	return value
+}
+
+// GoValueToSnmpPDU maps a native Go value to the appropriate
+// ASN.1 type and value pair for an SNMP SET operation.
+func GoValueToSnmpPDU(v interface{}) (gosnmp.Asn1BER, interface{}, error) {
+	switch val := v.(type) {
+	case int:
+		return gosnmp.Integer, val, nil
+	case int32:
+		return gosnmp.Integer, int(val), nil
+	case int64:
+		return gosnmp.Counter64, val, nil
+	case uint:
+		return gosnmp.Gauge32, uint32(val), nil
+	case uint32:
+		return gosnmp.Gauge32, val, nil
+	case uint64:
+		return gosnmp.Counter64, val, nil
+	case float32:
+		return gosnmp.OpaqueFloat, val, nil
+	case float64:
+		return gosnmp.OpaqueDouble, val, nil
+	case string:
+		return gosnmp.OctetString, []byte(val), nil
+	case []byte:
+		return gosnmp.OctetString, val, nil
+	case bool:
+		if val {
+			return gosnmp.Integer, 1, nil
+		}
+		return gosnmp.Integer, 0, nil
+	default:
+		return gosnmp.OctetString, []byte(fmt.Sprintf("%v", v)), nil
 	}
 }

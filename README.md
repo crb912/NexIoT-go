@@ -1,4 +1,4 @@
-`octopus-edge-go`(IoT Edge) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
+`devices-iot-go-go`(IoT Edge) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
 
 Key Features:
 - Multi-Protocol: Out-of-the-box support for Modbus, SNMP, OPC, HTTP, and MQTT.
@@ -55,8 +55,8 @@ EdgeX UI: http://localhost:4000
 ### Start Device Services
 
 ```shell
-git clone git@github.com:crb912/octopus-edge.git
-cd octopus-edge
+git clone git@github.com:crb912/devices-iot-go.git
+cd devices-iot-go
 go mod tidy
 
 # Run with dev mode

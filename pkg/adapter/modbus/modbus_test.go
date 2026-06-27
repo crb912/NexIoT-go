@@ -2,9 +2,9 @@
 package modbus
 
 import (
+	"devices-iot-go/pkg/model"
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/model"
 	"strings"
 	"testing"
 	"time"
