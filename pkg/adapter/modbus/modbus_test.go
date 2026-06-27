@@ -4,7 +4,7 @@ package modbus
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/protocol/model"
+	"octopus-edge/pkg/model"
 	"strings"
 	"testing"
 	"time"
@@ -485,7 +485,7 @@ func TestIsConnected_NilClient(t *testing.T) {
 
 	mc := &ModbusClient{client: nil, connected: false}
 	if mc.IsConnected() {
-		t.Error("IsConnected() should be false when client is nil")
+		t.Error("IsConnected() should be false when protocol is nil")
 	}
 }
 

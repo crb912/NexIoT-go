@@ -1,9 +1,9 @@
-package client
+package protocol
 
 import (
 	"fmt"
+	"octopus-edge/pkg/model"
 	"octopus-edge/pkg/parser"
-	"octopus-edge/pkg/protocol/model"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
@@ -46,8 +46,8 @@ type RWClient interface {
 	Writer
 }
 
-// ReceiverAdapter interface: all passive protocols must implement this
-type ReceiverAdapter interface {
+// Listener interface: all passive protocols must implement this
+type Listener interface {
 	Start() error
 	Stop() error
 }

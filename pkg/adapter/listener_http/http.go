@@ -1,4 +1,4 @@
-package http_receiver
+package listener_http
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"octopus-edge/pkg/protocol/model"
+	"octopus-edge/pkg/model"
 	"time" // Imported for Shutdown timeout
 )
 

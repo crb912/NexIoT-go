@@ -1,15 +1,13 @@
-// Package connector manages IoT protocol clients/servers.
+// Package protocol manages IoT protocol clients/servers.
 // It handles connecting, disconnecting, and scheduling tasks.
 // It reuses existing connections instead of creating new ones.
-package client
+package protocol
 
 import (
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/cache"
-	"octopus-edge/pkg/conv"
-	"octopus-edge/pkg/protocol/adapter/modbus"
-	"octopus-edge/pkg/protocol/model"
+	"octopus-edge/pkg/adapter/modbus"
+	"octopus-edge/pkg/model"
 	"sync"
 	"time"
 )
@@ -55,7 +53,7 @@ func NewPolls(opts ...Option) *Polls {
 }
 
 // GetHandler returns an existing connection or creates a new one.
-func (p *Polls) GetHandler(pc *cache.ProtocolConfig) (ReadClient, error) {
+func (p *Polls) GetHandler(pc *model.ProtocolConfig) (ReadClient, error) {
 	protocol_, err := model.ValidateProtocol(pc.Name)
 	if err != nil {
 		return nil, err
@@ -88,7 +86,7 @@ func (p *Polls) GetHandler(pc *cache.ProtocolConfig) (ReadClient, error) {
 	// Create and connect the new adapter.
 	newAdapter, err := p.newClient(endpoint, protocol_, pc.GetTimeout(), pc.GetRawProtocolProperties())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client for endpoint %s: %w", endpoint, err)
+		return nil, fmt.Errorf("failed to create protocol for endpoint %s: %w", endpoint, err)
 	}
 
 	if err := newAdapter.Connect(); err != nil {
@@ -110,63 +108,23 @@ func (p *Polls) DisconnectAll() {
 	}
 }
 
-// addClient stores a client under the given key.
+// addClient stores a protocol under the given key.
 // Caller must hold p.mu write lock.
 func (p *Polls) addClient(key string, client ReadClient) {
 	p.clients[key] = client
 }
 
-// newClient is a factory that returns the correct ReadClient
+// newClient is a factory that returns the correct RWClient
 // based on protocolName. For "modbus-tcp" and "modbus-rtu" it builds a
 // ModbusClient from the provided args map; other protocols can be added here.
-func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, timeout time.Duration, args map[string]string) (ReadClient, error) {
+func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, timeout time.Duration, args map[string]string) (RWClient, error) {
 	switch protocolName {
 	case model.ModbusTCP:
-		return newModbusClient(endpoint, model.ModbusTCP, timeout, args)
+		return modbus.NewModbusClient(endpoint, model.ModbusTCP, timeout, args)
 	case model.ModbusRTU:
 
-		return newModbusClient(endpoint, model.ModbusRTU, timeout, args)
+		return modbus.NewModbusClient(endpoint, model.ModbusRTU, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}
-}
-
-// newModbusClient constructs a ModbusClient from a generic args map.
-func newModbusClient(endpoint string, pt model.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*modbus.ModbusClient, error) {
-	c := &modbus.ModbusClient{
-		EndPoint:     endpoint,
-		ProtocolType: pt,
-		Timeout:      defaultTimeout,
-		// RTU defaults
-		DataBits: 8,
-		StopBits: 1,
-		Parity:   0,
-	}
-
-	if args == nil {
-		return c, nil
-	}
-
-	if v, ok := args["baud_rate"]; ok {
-		if u, ok := conv.ToUint(v); ok {
-			c.BaudRate = u
-		}
-	}
-	if v, ok := args["data_bits"]; ok {
-		if u, ok := conv.ToUint(v); ok {
-			c.DataBits = u
-		}
-	}
-	if v, ok := args["stop_bits"]; ok {
-		if u, ok := conv.ToUint(v); ok {
-			c.StopBits = u
-		}
-	}
-	if v, ok := args["parity"]; ok {
-		if u, ok := conv.ToUint(v); ok {
-			c.Parity = u
-		}
-	}
-
-	return c, nil
 }

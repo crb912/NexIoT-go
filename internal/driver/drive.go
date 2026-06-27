@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"octopus-edge/pkg/cache"
-	protocolclient2 "octopus-edge/pkg/protocol/client"
+	"octopus-edge/pkg/model"
+	"octopus-edge/pkg/protocol"
 	"reflect"
 	"time"
 
@@ -24,14 +24,14 @@ const readCommandsExecutedName = "ReadCommandsExecuted"
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
 	asyncCh              chan<- *sdkModels.AsyncValues       // data actively reported by devices.
-	receivedData         chan protocolclient2.ReceiveEvent   // Bridge channel between Receivers and EdgeX
+	receivedData         chan protocol.ReceiveEvent          // Bridge channel between Receivers and EdgeX
 	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	readCommandsExecuted gometrics.Counter
 	serviceConfig        *config.ServiceConfig // user defined config
-	polls                *protocolclient2.Polls
-	receivers            *protocolclient2.Receivers
+	polls                *protocol.Polls
+	receivers            *protocol.Receivers
 }
 
 // Initialize performs protocol-independent initialization for the device service.
@@ -42,7 +42,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	cd.ctx, cd.cancel = context.WithCancel(context.Background())
 
 	// Initialize channel with buffer size based on expected concurrency
-	cd.receivedData = make(chan protocolclient2.ReceiveEvent, 256)
+	cd.receivedData = make(chan protocol.ReceiveEvent, 256)
 
 	ds := interfaces.Service()
 	// Log the service version
@@ -80,12 +80,12 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 func (cd *CompositeDriver) Start() (err error) {
 	cd.lc.Info("Driver Start")
 
-	cd.polls = protocolclient2.NewPolls(
-		protocolclient2.WithMaxCounts(30),
-		protocolclient2.WithTimeout(5*time.Second))
+	cd.polls = protocol.NewPolls(
+		protocol.WithMaxCounts(30),
+		protocol.WithTimeout(5*time.Second))
 	cd.lc.Info("Polls Started")
 
-	cd.receivers = protocolclient2.NewReceivers(15, 16)
+	cd.receivers = protocol.NewReceivers(15, 16)
 	//  Start the internal consumer goroutine
 	go cd.processReceiveData()
 	cd.receivers.RegisterHttpServer("127.0.0.1", 8000, "/alarm/push", cd.receivedData)
@@ -124,7 +124,7 @@ func (cd *CompositeDriver) Stop(force bool) error {
 // HandleReadCommands triggers a Read operation for the specified device.
 func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest) (res []*sdkModels.CommandValue, err error) {
 	for protocolName, protocolProperties := range protocols {
-		protocolConfig := cache.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
+		protocolConfig := model.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
 
 		if protocolConfig.IsDisabled() {
 			cd.lc.Debugf("Skip device: %s protocol %s (disabled)", deviceName, protocolName)
@@ -138,7 +138,7 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 		}
 
 		if len(reqs) == 1 {
-			cv, err := protocolclient2.HandleReadSingle(reader, reqs[0])
+			cv, err := protocol.HandleReadSingle(reader, reqs[0])
 			if err != nil {
 				cd.lc.Errorf("@read failed: dev %s, res %s, err %v", deviceName, reqs[0].DeviceResourceName, err)
 				continue
@@ -148,7 +148,7 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 			cd.lc.Debugf("@read ok: dev %s, res %s, val %v ", deviceName, cv.DeviceResourceName, cv.Value)
 		}
 
-		cvList, err := protocolclient2.HandleReadBatch(reader, reqs)
+		cvList, err := protocol.HandleReadBatch(reader, reqs)
 		if err != nil {
 			cd.lc.Errorf("@read batch failed: dev %s, err %v", deviceName, err)
 		}
@@ -163,7 +163,7 @@ func (cd *CompositeDriver) HandleReadCommands(deviceName string, protocols map[s
 func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []sdkModels.CommandRequest,
 	params []*sdkModels.CommandValue) error {
 	for protocolName, protocolProperties := range protocols {
-		protocolConfig := cache.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
+		protocolConfig := model.ResolveProtocolConfig(deviceName, protocolName, protocolProperties)
 
 		if protocolConfig.IsDisabled() {
 			cd.lc.Debugf("Skip write: device %s protocol %s (disabled)", deviceName, protocolName)
@@ -176,20 +176,20 @@ func (cd *CompositeDriver) HandleWriteCommands(deviceName string, protocols map[
 			continue
 		}
 
-		writer, ok := handler.(protocolclient2.Writer)
+		writer, ok := handler.(protocol.Writer)
 		if !ok {
 			cd.lc.Errorf("Protocol %s does not support write operations for device %s", protocolName, deviceName)
 			continue
 		}
 
 		if len(reqs) == 1 {
-			if err := protocolclient2.HandleWriteSingle(writer, reqs[0], params[0]); err != nil {
+			if err := protocol.HandleWriteSingle(writer, reqs[0], params[0]); err != nil {
 				cd.lc.Errorf("@write failed: dev %s, res %s, err %v", deviceName, reqs[0].DeviceResourceName, err)
 				return err
 			}
 			cd.lc.Debugf("@write ok: dev %s, res %s, val %v", deviceName, reqs[0].DeviceResourceName, params[0].Value)
 		} else {
-			if err := protocolclient2.HandleWriteBatch(writer, reqs, params); err != nil {
+			if err := protocol.HandleWriteBatch(writer, reqs, params); err != nil {
 				cd.lc.Errorf("@write batch failed: dev %s, err %v", deviceName, err)
 				return err
 			}

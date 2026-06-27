@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"octopus-edge/pkg/conv"
-	"octopus-edge/pkg/protocol/model"
+	"octopus-edge/pkg/model"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +50,44 @@ const (
 	tableInputRegisters   tableType = "INPUT_REGISTERS"
 )
 
+// NewModbusClient constructs a ModbusClient from a generic args map.
+func NewModbusClient(endpoint string, pt model.ProtocolType, defaultTimeout time.Duration, args map[string]string) (*ModbusClient, error) {
+	c := &ModbusClient{
+		EndPoint:     endpoint,
+		ProtocolType: pt,
+		Timeout:      defaultTimeout,
+		// RTU defaults
+		DataBits: 8,
+		StopBits: 1,
+		Parity:   0,
+	}
+	if args == nil {
+		return c, nil
+	}
+
+	if v, ok := args["baud_rate"]; ok {
+		if u, ok := conv.ToUint(v); ok {
+			c.BaudRate = u
+		}
+	}
+	if v, ok := args["data_bits"]; ok {
+		if u, ok := conv.ToUint(v); ok {
+			c.DataBits = u
+		}
+	}
+	if v, ok := args["stop_bits"]; ok {
+		if u, ok := conv.ToUint(v); ok {
+			c.StopBits = u
+		}
+	}
+	if v, ok := args["parity"]; ok {
+		if u, ok := conv.ToUint(v); ok {
+			c.Parity = u
+		}
+	}
+	return c, nil
+}
+
 // Connect opens the physical connection.
 func (m *ModbusClient) Connect() error {
 	m.mu.Lock()
@@ -91,7 +129,7 @@ func (m *ModbusClient) Disconnect() error {
 	return nil
 }
 
-// IsConnected checks if the client is still connected.
+// IsConnected checks if the protocol is still connected.
 func (m *ModbusClient) IsConnected() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -238,7 +276,7 @@ func (m *ModbusClient) newClient() (*modbus.ModbusClient, error) {
 	underlyingClient, err := modbus.NewClient(clientConfig)
 	if err != nil {
 		m.connected = false
-		return underlyingClient, fmt.Errorf("failed to create modbus client: %w", err)
+		return underlyingClient, fmt.Errorf("failed to create modbus protocol: %w", err)
 	}
 	m.connected = true
 	return underlyingClient, nil

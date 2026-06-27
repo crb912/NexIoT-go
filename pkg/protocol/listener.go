@@ -1,10 +1,10 @@
-package client
+package protocol
 
 import (
 	"context"
 	"fmt"
-	"octopus-edge/pkg/protocol/adapter/http_receiver"
-	"octopus-edge/pkg/protocol/model"
+	"octopus-edge/pkg/adapter/listener_http"
+	"octopus-edge/pkg/model"
 	"sync"
 	"time"
 )
@@ -13,7 +13,7 @@ type Receivers struct {
 	mu              sync.RWMutex
 	timeout         time.Duration
 	maxSize         int
-	Servers         []ReceiverAdapter
+	Servers         []Listener
 	MergedAsyncData chan model.ReceiveEvent // Shared channel for all servers
 }
 
@@ -45,21 +45,21 @@ func NewReceivers(timeout time.Duration, maxSize int) *Receivers {
 		timeout: timeout,
 		maxSize: maxSize,
 		// Initialize an empty slice for servers.
-		Servers: make([]ReceiverAdapter, 0),
+		Servers: make([]Listener, 0),
 		// Create a buffered channel.
 		MergedAsyncData: make(chan model.ReceiveEvent, maxSize),
 	}
 }
 
 func (rc *Receivers) RegisterHttpServer(host string, port uint16, urlHandle string, ch chan ReceiveEvent) {
-	server := http_receiver.NewHttpReceiver(host, port, urlHandle)
+	server := listener_http.NewHttpReceiver(host, port, urlHandle)
 
 	// Override the server's AsyncData channel with the shared one
 	server.AsyncData = ch
 	rc.Servers = append(rc.Servers, server)
 }
 
-// StartAll calls Start on every ReceiverAdapter in parallel.
+// StartAll calls Start on every Listener in parallel.
 func (rc *Receivers) StartAll(ctx context.Context) error {
 	for i := range rc.Servers {
 		go rc.Servers[i].Start()
@@ -68,7 +68,7 @@ func (rc *Receivers) StartAll(ctx context.Context) error {
 	return nil
 }
 
-// StopAll calls Stop on every ReceiverAdapter and returns joined errors.
+// StopAll calls Stop on every Listener and returns joined errors.
 func (rc *Receivers) StopAll() error {
 	if rc == nil {
 		return nil
