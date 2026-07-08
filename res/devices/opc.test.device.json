@@ -1,0 +1,33 @@
+[
+  {
+    "name": "OPC-TCP-test-device",
+    "profileName": "OPC-TCP-test-Profile",
+    "description": "opc.",
+    "labels": [
+      "OPCUA",
+      "TEST"
+    ],
+    "protocols": {
+      "opcua": {
+        "Enabled": "true",
+        "Address": "127.0.0.1",
+        "Port": "5353",
+        "Endpoint": "opc.tcp://127.0.0.1:5353/OPCUA/SimulationServer",
+        "Timeout": "5",
+        "IdleTimeout": "5"
+      }
+    },
+    "autoEvents": [
+      {
+        "interval": "40s",
+        "onChange": false,
+        "sourceName": "ConstantNum"
+      },
+      {
+        "interval": "42s",
+        "onChange": false,
+        "sourceName": "ReadCounterAndRandom"
+      }
+    ]
+  }
+]
