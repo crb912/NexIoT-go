@@ -52,34 +52,44 @@ class OpcNodeManager:
         return type_map.get(type_string, ua.VariantType.String)
 
     @staticmethod
+    def _get_initial_value(props: dict, variant_type: ua.VariantType):
+        """Extract and convert defaultValue from deviceResource properties.
+        
+        The defaultValue is stored as a string in JSON (e.g. "2.56", "0").
+        Convert to the correct numeric type based on variant_type.
+        Falls back to zero if defaultValue is missing or unparseable.
+        """
+        raw = props.get("defaultValue")
+        if raw is None:
+            return 0.0 if variant_type == ua.VariantType.Double else 0
+        try:
+            if variant_type == ua.VariantType.Double:
+                return float(raw)
+            if variant_type == ua.VariantType.Int32:
+                return int(float(raw))  # float() first to handle "2.56" → 2
+            return 0
+        except (ValueError, TypeError):
+            return 0.0 if variant_type == ua.VariantType.Double else 0
+
+    @staticmethod
     async def create_nodes(server: Server, resources: list, device_commands: list) -> dict:
         """Create variables in the OPC UA server and return a dictionary of node objects."""
-        # Build a {resource_name: default_value} mapping from deviceCommands
-        defaults = {}
-        for cmd in device_commands:
-            for op in cmd.get("resourceOperations", []):
-                res_name = op.get("deviceResource")
-                if res_name and "defaultValue" in op:
-                    defaults[res_name] = op["defaultValue"]
-
         nodes = {}
         objects_node = server.nodes.objects
         
         for resource in resources:
             name = resource["name"]
             address = resource["attributes"]["address"]
-            value_type_str = resource["properties"]["valueType"]
-            is_writable = resource["properties"]["readWrite"] == "RW"
+            props = resource["properties"]
+            value_type_str = props["valueType"]
+            is_writable = props.get("readWrite") == "RW"
             
             # Setup node parameters
             node_id = OpcNodeManager.parse_node_id(address)
             variant_type = OpcNodeManager.get_variant_type(value_type_str)
 
-            # Use defaultValue from profile if present, otherwise fall back to zero
-            if name in defaults:
-                initial_value = defaults[name]
-            else:
-                initial_value = 0.0 if variant_type == ua.VariantType.Double else 0
+            # Use defaultValue from deviceResource properties if present, fall back to zero
+            initial_value = OpcNodeManager._get_initial_value(props, variant_type)
             
             # Create the variable
             var_node = await objects_node.add_variable(

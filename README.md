@@ -7,13 +7,14 @@ Key Features:
 - Configuration-Driven: Flexible read/write operations fully managed via configuration files.
 - Highly Extensible: Designed for easy integration of additional standard or proprietary protocols.
 
+
 ## Table of Contents
 
+- [Architecture](#architecture)
 - [Quick Start](#quick-start)
   - [Prerequisites: Start EdgeX Core Services](#prerequisites-start-edgex-core-services)
   - [Start Device Services](#start-device-services)
   - [Verification and Test Commands](#verification-and-test-commands)
-- [System Architecture](#system-architecture)
 - [Configuration Guide](#configuration-guide)
   - [How to Configure Device and Profiles](#how-to-configure-device-and-profiles)
   - [Load Configs with Scripts](#load-configs-with-scripts)
@@ -22,68 +23,7 @@ Key Features:
   - [开发者 Wiki (中文)](docs/wiki-zh.md)
 
 
-## Quick Start
-
-### Prerequisites: Start EdgeX Core Services
-
-```bash
-# Download docker-compose.yml
-curl -o docker-compose.yml https://raw.githubusercontent.com/edgexfoundry/edgex-compose/kamakura/docker-compose-no-secty.yml
-#  or, use built-in docker-compose.yml for China Developer
-
-docker compose pull
-docker compose up -d
-```
-
-Check Edge-X service by`docker stats` command:
-
-```text
-edgex-core-data         0.03%     10.59MiB / 31.13GiB   0.03%     369kB / 476kB
-edgex-core-command      0.02%     7.754MiB / 31.13GiB   0.02%     73.4kB / 50.3kB
-edgex-core-metadata     0.03%     8.945MiB / 31.13GiB   0.03%     172kB / 172kB
-edgex-redis             0.20%     2.984MiB / 31.13GiB   0.01%     913kB / 565kB
-...
-```
-
-Port definitions:
-
-- Port 59880 (Core Data，`edgex-core-data`: Collects, stores, and routes the actual sensor readings coming UP from the devices.
-- Port 59881 (Core Metadata, `edgex-core-metadata`): Used only for managing metadata (e.g., creating/updating profiles, adding devices). It does NOT read actual device data.
-- Port 59882 (Core Command, `edgex-core-command`): The core microservice port used to send actual Read and Write commands to the devices.
-
-Consul (Service register and configuration):  http://localhost:8500
-EdgeX UI: http://localhost:4000
-
-### Start Device Services
-
-```shell
-git clone git@github.com:crb912/devices-iot-go.git
-cd devices-iot-go
-go mod tidy
-
-# Run with dev mode
-make dev
-```
-
-### Verification and Test Commands
-
-Check the device service has loaded the default test (Modbus) device.
-
-| **Description** | **Command** |
-|:---|:---|
-| Verify the backend EdgeX service API | `curl http://localhost:59880/api/v2/ping`|
-| Verify pre-defined devices<br>*(Note: You can replace `*-test-device` with your actual device)* | `curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device`|
-| View pre-defined profile | `curl http://localhost:59881/api/v2/deviceprofile/name/Test-Device-Modbus-Profile`|
-| View pre-defined device resource<br>*(Note: `isHidden: false`)* | `curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/ip_address`|
-| View log (last 20 lines) | `docker logs edgex-core-command --tail 20`|
-| Check the latest events  | `curl http://localhost:59880/api/v2/event/device/name/Modbus-TCP-RTU-test-device?limit=5` |
-| Trigger a read command  <br> Assuming the device simulator is already running (python3 ./simulator/modbus.py). | `curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/Battery-Config`<br>`curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/System-Time` <br> or `python3 ./scripts/resource_read.py` |
-| Trigger a write command  | `python3 ./scripts/resource_write.py |
-
-
-- Test SMNP: `curl http://localhost:59882/api/v2/device/name/SNMP-TCP-trendnet01/MacAddress`
-
-## System Architecture
+## Architecture
 
 ```Plaintext
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -123,6 +63,102 @@ Check the device service has loaded the default test (Modbus) device.
 - **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Conection layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
 - **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
 - **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
+
+## Quick Start
+
+### Prerequisites: Start EdgeX Core Services
+
+docker:
+
+```bash
+# Download docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/edgexfoundry/edgex-compose/kamakura/docker-compose-no-secty.yml
+#  or, use built-in docker-compose.yml for China Developer
+
+docker compose pull
+docker compose up -d
+```
+
+Check Edge-X service by`docker stats` command:
+
+```text
+edgex-core-data         0.03%     10.59MiB / 31.13GiB   0.03%     369kB / 476kB
+edgex-core-command      0.02%     7.754MiB / 31.13GiB   0.02%     73.4kB / 50.3kB
+edgex-core-metadata     0.03%     8.945MiB / 31.13GiB   0.03%     172kB / 172kB
+edgex-redis             0.20%     2.984MiB / 31.13GiB   0.01%     913kB / 565kB
+```
+
+Port definitions:
+
+- 59880: `edgex-core-data`, Collects, stores, and routes the actual sensor readings coming UP from the devices.
+- 59881: `edgex-core-metadata`, Used only for managing metadata (e.g., creating/updating profiles, adding devices). It does NOT read actual device data.
+- 59882: `edgex-core-command`, The core microservice port used to send actual Read and Write commands to the devices.
+
+API: 
+
+- http://localhost:8500, Consul (Service register and configuration)
+- http://localhost:4000, EdgeX UI
+
+### Start Device Services
+
+```shell
+git clone git@github.com:crb912/devices-iot-go.git
+cd devices-iot-go
+go mod tidy
+
+# Run with dev mode
+make build
+make dev
+```
+
+### Verification and Test
+
+- Verify EdgeX service API: `curl http://localhost:59880/api/v2/ping`
+- Verify pre-defined devices: `curl http://localhost:59881/api/v2/device/name/Modbus-TCP-RTU-test-device`
+- Verify pre-defined profile: `curl http://localhost:59881/api/v2/deviceprofile/name/`
+
+**Verification res devices/profiles config load**:
+
+```shell
+docker logs edgex-core-metadata --tail 20
+```
+
+**Verification device command trigger**:
+
+```shell
+docker logs edgex-core-command --tail 20
+
+# the latest Read/Write events
+curl http://localhost:59880/api/v2/event/device/name/Modbus-TCP-RTU-test-device?limit=5
+```
+
+
+**Test Modus** with default devices:
+
+```shell
+python3 ./simulator/modbus.py
+
+curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/Battery-Config
+curl http://localhost:59882/api/v2/device/name/Modbus-TCP-RTU-test-device/System-Time
+
+python3 ./scripts/resource_read.py
+python3 ./scripts/resource_write.py
+```
+
+**Test SNMP**:
+
+```shell
+python ./simulator/snmp.py
+curl http://localhost:59882/api/v2/device/name/SNMP-TCP-trendnet01/MacAddress
+```
+
+**Test opc**:
+
+```shell
+python ./simulator/opc.py
+curl http://localhost:59882/api/v2/device/name/OPC-TCP-test-device/Constant
+# default value = 2.56
+```
 
 ## Configuration Guide
 

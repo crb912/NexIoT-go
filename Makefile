@@ -48,7 +48,7 @@ build:
 	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/main.go
 
 ## dev: Build, start background simulator, then run the service
-dev: build
+dev:
 	@echo "=> Starting $(SERVICE_NAME) (Dev Mode)..."
 	EDGEX_SECURITY_SECRET_STORE=false $(BINARY) \
 		--confdir=$(CONFIG_DIR) \
