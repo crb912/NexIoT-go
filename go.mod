@@ -1,10 +1,11 @@
 module devices-iot-go
 
-go 1.21
+go 1.23
 
 require (
 	github.com/edgexfoundry/device-sdk-go/v2 v2.3.0
 	github.com/edgexfoundry/go-mod-core-contracts/v2 v2.3.0
+	github.com/gopcua/opcua v0.9.0
 	github.com/gosnmp/gosnmp v1.38.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/simonvetter/modbus v1.6.4
@@ -32,7 +33,7 @@ require (
 	github.com/go-redis/redis/v7 v7.3.0 // indirect
 	github.com/goburrow/serial v0.1.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/consul/api v1.15.3 // indirect
@@ -63,7 +64,7 @@ require (
 	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa // indirect
 	google.golang.org/grpc v1.46.0 // indirect

@@ -1,3 +1,5 @@
+// Package parser:decode provides functions to decode raw data from devices into structured formats.
+
 package parser
 
 import (

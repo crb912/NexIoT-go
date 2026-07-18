@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"devices-iot-go/pkg/adapter/modbus"
+	"devices-iot-go/pkg/adapter/opcua"
 	"devices-iot-go/pkg/adapter/snmp"
 	"devices-iot-go/pkg/model"
 	"errors"
@@ -117,6 +118,8 @@ func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, time
 		return modbus.NewModbusClient(endpoint, model.ModbusRTU, timeout, args)
 	case model.SNMP:
 		return snmp.NewSnmpClient(endpoint, model.SNMP, timeout, args)
+	case model.OPCUA:
+		return opcua.NewOpcuaClient(endpoint, model.OPCUA, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}

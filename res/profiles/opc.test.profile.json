@@ -1,0 +1,76 @@
+{
+  "name": "OPC-TCP-test-Profile",
+  "manufacturer": "Haima",
+  "model": "Simlulator",
+  "labels": [
+    "OPCUA",
+    "TEST"
+  ],
+  "description": "Simulation OPCUA Server",
+  "deviceResources": [
+    {
+      "name": "Constant",
+      "description": "generated constant number",
+      "isHidden": false,
+      "properties": {
+        "valueType": "Float64",
+        "readWrite": "RW",
+        "defaultValue": "2.56"
+      },
+      "attributes": {
+        "address": "ns=3;i=1001"
+      }
+    },
+    {
+      "name": "Counter",
+      "description": "generated counter number",
+      "isHidden": false,
+      "properties": {
+        "valueType": "Int32",
+        "readWrite": "R",
+        "defaultValue": "0"
+      },
+      "attributes": {
+        "address": "ns=3;i=1002"
+      }
+    },
+    {
+      "name": "Random",
+      "description": "generated random number",
+      "isHidden": true,
+      "properties": {
+        "valueType": "Float64",
+        "readWrite": "R",
+        "defaultValue": "0.0"
+      },
+      "attributes": {
+        "address": "ns=3;i=1003"
+      }
+    }
+  ],
+  "deviceCommands": [
+    {
+      "name": "ConstantNum",
+      "isHidden": false,
+      "readWrite": "RW",
+      "resourceOperations": [
+        {
+          "deviceResource": "Constant"
+        }
+      ]
+    },
+    {
+      "name": "ReadCounterAndRandom",
+      "isHidden": false,
+      "readWrite": "R",
+      "resourceOperations": [
+        {
+          "deviceResource": "Counter"
+        },
+        {
+          "deviceResource": "Random"
+        }
+      ]
+    }
+  ]
+}

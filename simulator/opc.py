@@ -52,8 +52,16 @@ class OpcNodeManager:
         return type_map.get(type_string, ua.VariantType.String)
 
     @staticmethod
-    async def create_nodes(server: Server, resources: list) -> dict:
+    async def create_nodes(server: Server, resources: list, device_commands: list) -> dict:
         """Create variables in the OPC UA server and return a dictionary of node objects."""
+        # Build a {resource_name: default_value} mapping from deviceCommands
+        defaults = {}
+        for cmd in device_commands:
+            for op in cmd.get("resourceOperations", []):
+                res_name = op.get("deviceResource")
+                if res_name and "defaultValue" in op:
+                    defaults[res_name] = op["defaultValue"]
+
         nodes = {}
         objects_node = server.nodes.objects
         
@@ -66,7 +74,12 @@ class OpcNodeManager:
             # Setup node parameters
             node_id = OpcNodeManager.parse_node_id(address)
             variant_type = OpcNodeManager.get_variant_type(value_type_str)
-            initial_value = 0.0 if variant_type == ua.VariantType.Double else 0
+
+            # Use defaultValue from profile if present, otherwise fall back to zero
+            if name in defaults:
+                initial_value = defaults[name]
+            else:
+                initial_value = 0.0 if variant_type == ua.VariantType.Double else 0
             
             # Create the variable
             var_node = await objects_node.add_variable(
@@ -118,7 +131,7 @@ async def main():
     # 1. Load configurations
     config_loader = ConfigLoader()
     devices = config_loader.load_json("res/devices/opc.test.device.json")
-    profile = config_loader.load_json("res/profiles/opc,test.profile.json")
+    profile = config_loader.load_json("res/profiles/opc.test.profile.json")
     
     # Get the active device config
     device_cfg = devices[0]
@@ -132,7 +145,8 @@ async def main():
     
     # 3. Create Nodes
     resources = profile["deviceResources"]
-    created_nodes = await OpcNodeManager.create_nodes(server, resources)
+    device_commands = profile.get("deviceCommands", [])
+    created_nodes = await OpcNodeManager.create_nodes(server, resources, device_commands)
     
     # 4. Start Server
     async with server:

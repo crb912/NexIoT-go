@@ -1,3 +1,5 @@
+// Package parser:encode provides functions to encode structured data into raw formats for devices.
+
 package parser
 
 import (
