@@ -4,6 +4,7 @@
 package protocol
 
 import (
+	"next-iot-go/pkg/adapter/httpclient"
 	"next-iot-go/pkg/adapter/modbus"
 	"next-iot-go/pkg/adapter/opcua"
 	"next-iot-go/pkg/adapter/snmp"
@@ -120,6 +121,8 @@ func (p *Polls) newClient(endpoint string, protocolName model.ProtocolType, time
 		return snmp.NewSnmpClient(endpoint, model.SNMP, timeout, args)
 	case model.OPCUA:
 		return opcua.NewOpcuaClient(endpoint, model.OPCUA, timeout, args)
+	case model.HTTPClient:
+		return httpclient.NewHttpClient(endpoint, model.HTTPClient, timeout, args)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocolName)
 	}

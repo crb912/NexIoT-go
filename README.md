@@ -1,6 +1,6 @@
 # NexIoT-go: Multi-Protocol Industrial IoT Edge Gateway
 
-`next-iot-go`(NexIoT-go) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
+NexIoT-go (`next-iot-go`) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
 
 Key Features:
 - Multi-Protocol: Out-of-the-box support for Modbus, SNMP, OPC, HTTP, and MQTT.

@@ -1,0 +1,39 @@
+[
+  {
+    "name": "HTTP-Test-Device",
+    "profileName": "Test-HTTP-Profile",
+    "description": "This device is an HTTP-based sensor for monitoring temperature and humidity.",
+    "labels": [
+      "HTTP",
+      "sensor"
+    ],
+    "protocols": {
+      "http-client": {
+        "Enabled": "true",
+        "Endpoint": "http://127.0.0.1:9000",
+        "Timeout": "5",
+        "LoginURL": "/api/v1/login",
+        "LogoutURL": "/api/v1/logout",
+        "Username": "admin",
+        "Password": "admin123",
+        "AuthType": "bearer",
+        "TokenField": "token",
+        "AuthHeader": "Authorization",
+        "ReadMethod": "GET",
+        "WriteMethod": "POST"
+      }
+    },
+    "autoEvents": [
+      {
+        "interval": "20s",
+        "onChange": false,
+        "sourceName": "Temperature"
+      },
+      {
+        "interval": "30s",
+        "onChange": false,
+        "sourceName": "Humidity"
+      }
+    ]
+  }
+]

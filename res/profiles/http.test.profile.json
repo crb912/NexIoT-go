@@ -1,0 +1,40 @@
+{
+  "name": "Test-HTTP-Profile",
+  "manufacturer": "Generic HTTP Sensor",
+  "model": "HTTPSensor-01",
+  "labels": [
+    "HTTP",
+    "Sensor"
+  ],
+  "description": "Profile for HTTP-based temperature and humidity sensor",
+  "deviceResources": [
+    {
+      "name": "Temperature",
+      "isHidden": false,
+      "description": "Current temperature in Celsius",
+      "attributes": { "address": "/api/v1/temperature" },
+      "properties": { "valueType": "Float64", "readWrite": "R", "defaultValue": "25.0" }
+    },
+    {
+      "name": "Humidity",
+      "isHidden": false,
+      "description": "Current humidity percentage",
+      "attributes": { "address": "/api/v1/humidity" },
+      "properties": { "valueType": "Float64", "readWrite": "R", "defaultValue": "60.0" }
+    },
+    {
+      "name": "Status",
+      "isHidden": false,
+      "description": "Device status code",
+      "attributes": { "address": "/api/v1/status" },
+      "properties": { "valueType": "String", "readWrite": "R", "defaultValue": "ok" }
+    },
+    {
+      "name": "Setpoint",
+      "isHidden": false,
+      "description": "Target temperature setpoint",
+      "attributes": { "address": "/api/v1/setpoint" },
+      "properties": { "valueType": "Float64", "readWrite": "RW", "defaultValue": "22.0" }
+    }
+  ]
+}

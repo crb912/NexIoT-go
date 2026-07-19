@@ -9,8 +9,9 @@ const (
 	ModbusTCP ProtocolType = "modbus-tcp"
 	ModbusRTU ProtocolType = "modbus-rtu"
 	SNMP      ProtocolType = "snmp"
-	OPCUA     ProtocolType = "opcua"
-	Unknown   ProtocolType = "unknown"
+	OPCUA      ProtocolType = "opcua"
+	HTTPClient ProtocolType = "http-client"
+	Unknown    ProtocolType = "unknown"
 )
 
 func ValidateProtocol(protocolName string) (ProtocolType, error) {
@@ -25,6 +26,8 @@ func ValidateProtocol(protocolName string) (ProtocolType, error) {
 		return SNMP, nil
 	case "opcua":
 		return OPCUA, nil
+	case "http-client":
+		return HTTPClient, nil
 	default:
 		return Unknown, errors.New("not support protocol type")
 	}
