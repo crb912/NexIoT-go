@@ -70,6 +70,27 @@ jobs:
           mkdir -p "dist/${ARTIFACT}"
           cp bin/${SERVICE_NAME} "dist/${ARTIFACT}/"
           cp -r res "dist/${ARTIFACT}/"
+          cp -r simulator "dist/${ARTIFACT}/"
+
+          printf '%s\n' \
+            "NexIoT-go — Multi-Protocol Industrial IoT Edge Gateway" \
+            "======================================================" \
+            "" \
+            "Quick Start" \
+            "-----------" \
+            "EDGEX_SECURITY_SECRET_STORE=false ./next-iot-go --confdir=./res --file=configuration.toml --overwrite" \
+            "" \
+            "Simulators" \
+            "----------" \
+            "Device simulators are included in the simulator/ directory:" \
+            "  python3 simulator/modbus.py    # Modbus TCP on port 5020" \
+            "  python3 simulator/snmp.py      # SNMP agent" \
+            "  python3 simulator/snmp_trap.py # SNMP trap sender" \
+            "  python3 simulator/http_device.py" \
+            "  python3 simulator/mqtt.py" \
+            "  python3 simulator/opc.py" \
+            > "dist/${ARTIFACT}/HOW_TO_USE.txt"
+
           tar -czf "dist/${ARTIFACT}.tar.gz" -C dist "${ARTIFACT}"
 
       - name: Upload artifact
