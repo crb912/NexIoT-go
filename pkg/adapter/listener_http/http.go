@@ -56,8 +56,6 @@ func NewHttpReceiver(host string, port uint16, pushPath string) *HttpReceiver {
 
 // Start runs the HTTP server. It blocks until the server stops.
 func (r *HttpReceiver) Start() error {
-	defer close(r.AsyncData)
-
 	// This blocks here.
 	err := r.server.ListenAndServe()
 
@@ -107,7 +105,7 @@ func (r *HttpReceiver) handlePush(w http.ResponseWriter, req *http.Request) {
 	}
 
 	select {
-	case r.AsyncData <- model.ReceiveEvent{EventName: eventName, EventTime: time.Now(), EventData: payload}:
+	case r.AsyncData <- model.ReceiveEvent{Source: "http", EventName: eventName, EventTime: time.Now(), EventData: payload}:
 		writeJSON(w, http.StatusOK, map[string]string{"message": "received"})
 	default:
 		writeError(w, http.StatusServiceUnavailable, "server busy")

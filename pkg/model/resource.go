@@ -24,6 +24,7 @@ type Resource struct {
 }
 
 type ReceiveEvent struct {
+	Source    string // "mqtt" | "http" | ...
 	EventName string
 	EventTime time.Time
 	EventData []byte
@@ -54,6 +55,21 @@ func NewResource(deviceRes sdkModels.CommandRequest) Resource {
 		}
 	}
 	return res
+}
+
+// ListenerConfig is the top-level structure for res/custom/listener.json.
+type ListenerConfig struct {
+	Listeners []ListenerItem `json:"listeners"`
+}
+
+// ListenerItem describes a single passive listener configuration.
+type ListenerItem struct {
+	Protocol  string `json:"protocol"`            // "http" | "mqtt" | "snmp"
+	Enabled   bool   `json:"enabled"`
+	Host      string `json:"host"`
+	Port      uint16 `json:"port"`
+	PushURL   string `json:"push_url,omitempty"`   // HTTP only
+	Community string `json:"community,omitempty"`  // SNMP only
 }
 
 // NewResourceN converts EdgeX model to generic Resource Slice

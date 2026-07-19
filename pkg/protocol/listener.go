@@ -3,6 +3,8 @@ package protocol
 import (
 	"context"
 	"devices-iot-go/pkg/adapter/listener_http"
+	"devices-iot-go/pkg/adapter/listener_mqtt"
+	"devices-iot-go/pkg/adapter/listener_snmp"
 	"devices-iot-go/pkg/model"
 	"fmt"
 	"sync"
@@ -55,6 +57,24 @@ func (rc *Receivers) RegisterHttpServer(host string, port uint16, urlHandle stri
 	server := listener_http.NewHttpReceiver(host, port, urlHandle)
 
 	// Override the server's AsyncData channel with the shared one
+	server.AsyncData = ch
+	rc.Servers = append(rc.Servers, server)
+}
+
+// RegisterMqttServer creates an embedded MQTT broker listener and registers it with the shared channel.
+// Devices publish directly to this broker — no external broker required.
+func (rc *Receivers) RegisterMqttServer(host string, port uint16, ch chan ReceiveEvent) {
+	server := listener_mqtt.NewMqttReceiver(host, port)
+
+	// Override the server's AsyncData channel with the shared one
+	server.AsyncData = ch
+	rc.Servers = append(rc.Servers, server)
+}
+
+// RegisterSnmpTrapServer creates an SNMP trap listener and registers it with the shared channel.
+func (rc *Receivers) RegisterSnmpTrapServer(host string, port uint16, community string, ch chan ReceiveEvent) {
+	server := listener_snmp.NewSnmpReceiver(host, port, community)
+
 	server.AsyncData = ch
 	rc.Servers = append(rc.Servers, server)
 }

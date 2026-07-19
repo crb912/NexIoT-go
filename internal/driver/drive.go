@@ -5,10 +5,16 @@ import (
 	"context"
 	"devices-iot-go/pkg/model"
 	"devices-iot-go/pkg/protocol"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"os"
 	"reflect"
+	"strings"
 	"time"
+
+	"github.com/pelletier/go-toml"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/example/config"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces"
@@ -23,9 +29,10 @@ const readCommandsExecutedName = "ReadCommandsExecuted"
 
 type CompositeDriver struct {
 	lc                   logger.LoggingClient
-	asyncCh              chan<- *sdkModels.AsyncValues       // data actively reported by devices.
-	receivedData         chan protocol.ReceiveEvent          // Bridge channel between Receivers and EdgeX
-	deviceCh             chan<- []sdkModels.DiscoveredDevice // add device
+	ds                   interfaces.DeviceServiceSDK          // for device/profile lookup
+	asyncCh              chan<- *sdkModels.AsyncValues         // data actively reported by devices.
+	receivedData         chan protocol.ReceiveEvent            // Bridge channel between Receivers and EdgeX
+	deviceCh             chan<- []sdkModels.DiscoveredDevice   // add device
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	readCommandsExecuted gometrics.Counter
@@ -45,6 +52,7 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	cd.receivedData = make(chan protocol.ReceiveEvent, 256)
 
 	ds := interfaces.Service()
+	cd.ds = ds
 	// Log the service version
 	cd.lc.Infof("Starting %s: Version %s", ds.Name(), ds.Version())
 
@@ -55,9 +63,6 @@ func (cd *CompositeDriver) Initialize(lc logger.LoggingClient, asyncCh chan<- *s
 	}
 	lc.Infof("Custom config is: %v", cd.serviceConfig.SimpleCustom)
 
-	if err := cd.serviceConfig.SimpleCustom.Validate(); err != nil {
-		return fmt.Errorf("'SimpleCustom' custom configuration validation failed: %s", err.Error())
-	}
 	// dynamic configuration hot update
 	if err := ds.ListenForCustomConfigChanges(
 		&cd.serviceConfig.SimpleCustom.Writable,
@@ -88,7 +93,12 @@ func (cd *CompositeDriver) Start() (err error) {
 	cd.receivers = protocol.NewReceivers(15, 16)
 	//  Start the internal consumer goroutine
 	go cd.processReceiveData()
-	cd.receivers.RegisterHttpServer("127.0.0.1", 8000, "/alarm/push", cd.receivedData)
+
+	// Load and register passive listeners from res/custom/listener.json
+	if err = cd.loadListeners(); err != nil {
+		cd.lc.Errorf("Failed to load listener config: %v", err)
+		return err
+	}
 
 	// Start all receivers, passing the internal channel to them
 	if err = cd.receivers.StartAll(cd.ctx); err != nil {
@@ -118,6 +128,62 @@ func (cd *CompositeDriver) Stop(force bool) error {
 	// Notify all background goroutines to exit
 	cd.cancel()
 	// Stop receivers one by one
+	return nil
+}
+
+// loadListeners reads listener.json (path from configuration.toml) and registers each enabled listener.
+func (cd *CompositeDriver) loadListeners() error {
+	// Resolve listener config path from configuration.toml → [SimpleCustom].ListenerConfigPath
+	configPath := "res/custom/listener.json"
+	if tree, err := toml.LoadFile("res/configuration.toml"); err == nil {
+		if v := tree.Get("SimpleCustom.ListenerConfigPath"); v != nil {
+			if s, ok := v.(string); ok && s != "" {
+				configPath = s
+			}
+		}
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read listener config %s: %w", configPath, err)
+	}
+
+	cfg := model.ListenerConfig{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("parse listener config: %w", err)
+	}
+
+	for i := range cfg.Listeners {
+		lc := &cfg.Listeners[i]
+		if !lc.Enabled {
+			continue
+		}
+
+		switch lc.Protocol {
+		case "http":
+			pushURL := lc.PushURL
+			if pushURL == "" {
+				pushURL = "/alarm/push"
+			}
+			cd.receivers.RegisterHttpServer(lc.Host, lc.Port, pushURL, cd.receivedData)
+			cd.lc.Infof("Registered HTTP listener on %s:%d", lc.Host, lc.Port)
+
+		case "mqtt":
+			cd.receivers.RegisterMqttServer(lc.Host, lc.Port, cd.receivedData)
+			cd.lc.Infof("Registered MQTT listener on %s:%d", lc.Host, lc.Port)
+
+		case "snmp":
+			community := lc.Community
+			if community == "" {
+				community = "public"
+			}
+			cd.receivers.RegisterSnmpTrapServer(lc.Host, lc.Port, community, cd.receivedData)
+			cd.lc.Infof("Registered SNMP trap listener on %s:%d", lc.Host, lc.Port)
+
+		default:
+			cd.lc.Warnf("Unknown listener protocol: %s", lc.Protocol)
+		}
+	}
 	return nil
 }
 
@@ -250,32 +316,257 @@ func (cd *CompositeDriver) Discover() {
 	cd.deviceCh <- res
 }
 
-// processReceiveData reads from receivedData and pushes to EdgeX
+// processReceiveData routes incoming ReceiveEvent by Source to the matching decoder.
 func (cd *CompositeDriver) processReceiveData() {
 	for {
 		select {
 		case <-cd.ctx.Done():
-			// Exit loop when Driver stops
 			return
-		case data := <-cd.receivedData:
-			cd.lc.Debugf("@!Received data: %v", data)
-			// Convert AsyncData to EdgeX CommandValue
-			cv, err := sdkModels.NewCommandValue("", common.ValueTypeFloat64, 1.1)
+		case data, ok := <-cd.receivedData:
+			if !ok {
+				return
+			}
+			cd.lc.Debugf("@!Received source=%s topic=%s payload=%d bytes", data.Source, data.EventName, len(data.EventData))
+
+			asyncVal, err := cd.decodeReceiveEvent(data)
 			if err != nil {
-				cd.lc.Errorf("Failed to create CommandValue: %v", err)
+				cd.lc.Warnf("decode %s: %v", data.Source, err)
 				continue
 			}
-
-			// Wrap into EdgeX AsyncValues structure
-			asyncVal := &sdkModels.AsyncValues{
-				DeviceName:    "Test Receiver",
-				CommandValues: []*sdkModels.CommandValue{cv},
+			if asyncVal != nil {
+				cd.asyncCh <- asyncVal
 			}
-
-			// Push to EdgeX core
-			cd.asyncCh <- asyncVal
 		}
 	}
+}
+
+// decodeReceiveEvent dispatches to the correct decoder based on Source.
+func (cd *CompositeDriver) decodeReceiveEvent(e protocol.ReceiveEvent) (*sdkModels.AsyncValues, error) {
+	switch e.Source {
+	case "mqtt":
+		return cd.decodeMqttPayload(e)
+	case "snmp":
+		return cd.decodeSnmpTrapPayload(e)
+	default:
+		return nil, fmt.Errorf("unknown source: %s", e.Source)
+	}
+}
+
+// lookupProfile returns the EdgeX DeviceProfile for a device, or nil if not found.
+func (cd *CompositeDriver) lookupProfile(deviceName string) *models.DeviceProfile {
+	device, err := cd.ds.GetDeviceByName(deviceName)
+	if err != nil {
+		cd.lc.Debugf("device %s not in registry: %v", deviceName, err)
+		return nil
+	}
+	profile, err := cd.ds.GetProfileByName(device.ProfileName)
+	if err != nil {
+		cd.lc.Warnf("profile %s not found: %v", device.ProfileName, err)
+		return nil
+	}
+	return &profile
+}
+
+// lookupDeviceByAddr finds a pre-defined device whose protocol Address matches the source IP.
+// Returns the device name and profile, or nil if no match.
+func (cd *CompositeDriver) lookupDeviceByAddr(sourceAddr string) (string, *models.DeviceProfile) {
+	host, _, err := net.SplitHostPort(sourceAddr)
+	if err != nil {
+		host = sourceAddr // already a bare IP
+	}
+
+	devices := cd.ds.Devices()
+	for _, d := range devices {
+		for _, proto := range d.Protocols {
+			if a, ok := proto["Address"]; ok && a == host {
+				profile := cd.lookupProfile(d.Name)
+				return d.Name, profile
+			}
+		}
+	}
+	return sourceAddr, nil
+}
+
+// ensureDevice creates a dynamic device in EdgeX via discovery if it's not already registered.
+func (cd *CompositeDriver) ensureDevice(deviceName, source string) {
+	discovered := []sdkModels.DiscoveredDevice{{
+		Name: deviceName,
+		Protocols: map[string]models.ProtocolProperties{
+			source: {"Address": deviceName},
+		},
+		Description: "Auto-discovered " + source + " device",
+		Labels:      []string{source, "auto-discovered"},
+	}}
+	select {
+	case cd.deviceCh <- discovered:
+		cd.lc.Infof("Dynamic device registered: %s (%s)", deviceName, source)
+	default:
+		cd.lc.Warnf("Discovery channel full, skip device %s", deviceName)
+	}
+}
+
+// decodeMqttPayload parses an MQTT JSON payload, matching fields against the device profile.
+func (cd *CompositeDriver) decodeMqttPayload(e protocol.ReceiveEvent) (*sdkModels.AsyncValues, error) {
+	var payload struct {
+		DeviceName string                 `json:"device_name"`
+		Data       map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(e.EventData, &payload); err != nil {
+		return nil, fmt.Errorf("invalid json: %w", err)
+	}
+	if payload.DeviceName == "" {
+		return nil, fmt.Errorf("missing device_name")
+	}
+	if len(payload.Data) == 0 {
+		return nil, fmt.Errorf("empty data for device %s", payload.DeviceName)
+	}
+
+	profile := cd.lookupProfile(payload.DeviceName)
+	if profile == nil {
+		cd.ensureDevice(payload.DeviceName, "mqtt")
+	}
+
+	cmdVals, err := cd.buildCommandValues(profile, payload.Data)
+	if err != nil {
+		return nil, err
+	}
+	if len(cmdVals) == 0 {
+		return nil, fmt.Errorf("no valid fields for device %s", payload.DeviceName)
+	}
+
+	sourceName := "data"
+	for k := range payload.Data {
+		sourceName = k
+		break
+	}
+
+	return &sdkModels.AsyncValues{
+		DeviceName:    payload.DeviceName,
+		SourceName:    sourceName,
+		CommandValues: cmdVals,
+	}, nil
+}
+
+// decodeSnmpTrapPayload parses an SNMP trap JSON payload, matching OIDs against the device profile.
+func (cd *CompositeDriver) decodeSnmpTrapPayload(e protocol.ReceiveEvent) (*sdkModels.AsyncValues, error) {
+	var payload struct {
+		SourceAddr string                 `json:"source_addr"`
+		Data       map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(e.EventData, &payload); err != nil {
+		return nil, fmt.Errorf("invalid snmp trap json: %w", err)
+	}
+	if payload.SourceAddr == "" {
+		return nil, fmt.Errorf("missing source_addr")
+	}
+	if len(payload.Data) == 0 {
+		return nil, fmt.Errorf("empty variables for %s", payload.SourceAddr)
+	}
+
+	// Match the trap source IP against pre-defined device addresses.
+	deviceName, profile := cd.lookupDeviceByAddr(payload.SourceAddr)
+	if profile == nil {
+		cd.ensureDevice(deviceName, "snmp")
+	}
+
+	cmdVals, err := cd.buildCommandValues(profile, payload.Data)
+	if err != nil {
+		return nil, err
+	}
+	if len(cmdVals) == 0 {
+		return nil, fmt.Errorf("no valid variables for %s", deviceName)
+	}
+
+	sourceName := "snmp_trap"
+	for k := range payload.Data {
+		sourceName = k
+		break
+	}
+
+	return &sdkModels.AsyncValues{
+		DeviceName:    deviceName,
+		SourceName:    sourceName,
+		CommandValues: cmdVals,
+	}, nil
+}
+
+// buildCommandValues creates CommandValues from a payload map, using profile types when available.
+func (cd *CompositeDriver) buildCommandValues(profile *models.DeviceProfile, data map[string]interface{}) ([]*sdkModels.CommandValue, error) {
+	var cmdVals []*sdkModels.CommandValue
+
+	for key, val := range data {
+		valueType, typedVal := resolveFieldType(profile, key, val)
+		cv, err := sdkModels.NewCommandValue(key, valueType, typedVal)
+		if err != nil {
+			cd.lc.Warnf("skip field %s (type=%s): %v", key, valueType, err)
+			continue
+		}
+		cmdVals = append(cmdVals, cv)
+	}
+	return cmdVals, nil
+}
+
+// resolveFieldType returns the EdgeX value type and type-converted value for a payload field.
+// If profile is available, its deviceResource valueType takes priority.
+func resolveFieldType(profile *models.DeviceProfile, fieldName string, val interface{}) (string, interface{}) {
+	// 1. Try profile-defined type
+	if profile != nil {
+		for _, dr := range profile.DeviceResources {
+			// Match by resource name
+			if dr.Name == fieldName {
+				return dr.Properties.ValueType, convertValue(val, dr.Properties.ValueType)
+			}
+			// Match by address attribute (OID), dots↔hyphens
+			if addr, ok := dr.Attributes["address"].(string); ok {
+				if addr == fieldName || strings.ReplaceAll(addr, ".", "-") == fieldName {
+					return dr.Properties.ValueType, convertValue(val, dr.Properties.ValueType)
+				}
+			}
+		}
+	}
+	// 2. Fallback: infer from JSON type
+	switch v := val.(type) {
+	case float64:
+		return common.ValueTypeFloat64, v
+	case string:
+		return common.ValueTypeString, v
+	case bool:
+		return common.ValueTypeBool, v
+	default:
+		return common.ValueTypeString, fmt.Sprintf("%v", v)
+	}
+}
+
+// convertValue converts a JSON-decoded value to match the target EdgeX value type.
+func convertValue(val interface{}, targetType string) interface{} {
+	switch targetType {
+	case common.ValueTypeFloat64, common.ValueTypeFloat32:
+		switch v := val.(type) {
+		case float64:
+			return v
+		case string:
+			return val
+		}
+	case common.ValueTypeInt32, common.ValueTypeInt16, common.ValueTypeUint16, common.ValueTypeUint32, common.ValueTypeUint64:
+		switch v := val.(type) {
+		case float64:
+			return int32(v)
+		case string:
+			return val
+		}
+	case common.ValueTypeString:
+		return fmt.Sprintf("%v", val)
+	case common.ValueTypeBool:
+		switch v := val.(type) {
+		case bool:
+			return v
+		case float64:
+			return v != 0
+		case string:
+			return v == "true" || v == "1"
+		}
+	}
+	return val
 }
 
 // ProcessCustomConfigChanges ...hot-reload configuration

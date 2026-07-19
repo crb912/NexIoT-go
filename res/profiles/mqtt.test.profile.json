@@ -1,0 +1,63 @@
+{
+  "name": "MQTT-Test-Profile",
+  "manufacturer": "Generic",
+  "model": "SIM-MQTT",
+  "labels": [
+    "MQTT",
+    "TEST"
+  ],
+  "description": "Profile for MQTT push devices",
+  "deviceResources": [
+    {
+      "name": "Temperature",
+      "isHidden": false,
+      "description": "Temperature reading in Celsius",
+      "properties": {
+        "valueType": "Float64",
+        "readWrite": "R",
+        "defaultValue": "25.0"
+      },
+      "attributes": {
+        "address": "temperature"
+      }
+    },
+    {
+      "name": "Humidity",
+      "isHidden": false,
+      "description": "Humidity reading in percent",
+      "properties": {
+        "valueType": "Float64",
+        "readWrite": "R",
+        "defaultValue": "60.0"
+      },
+      "attributes": {
+        "address": "humidity"
+      }
+    },
+    {
+      "name": "Status",
+      "isHidden": false,
+      "description": "Device status code",
+      "properties": {
+        "valueType": "Int32",
+        "readWrite": "R",
+        "defaultValue": "0"
+      },
+      "attributes": {
+        "address": "status"
+      }
+    }
+  ],
+  "deviceCommands": [
+    {
+      "name": "Telemetry",
+      "isHidden": false,
+      "readWrite": "R",
+      "resourceOperations": [
+        { "deviceResource": "Temperature" },
+        { "deviceResource": "Humidity" },
+        { "deviceResource": "Status" }
+      ]
+    }
+  ]
+}

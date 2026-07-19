@@ -43,6 +43,7 @@ help:
 
 ## build: Compile the binary
 build:
+	@go mod tidy
 	@echo "=> Building $(SERVICE_NAME) v$(SERVICE_VERSION)..."
 	@mkdir -p bin
 	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/main.go

@@ -1,0 +1,24 @@
+{
+  "listeners": [
+    {
+      "protocol": "http",
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 8000,
+      "push_url": "/alarm/push"
+    },
+    {
+      "protocol": "mqtt",
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 1883
+    },
+    {
+      "protocol": "snmp",
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 1620,
+      "community": "public"
+    }
+  ]
+}

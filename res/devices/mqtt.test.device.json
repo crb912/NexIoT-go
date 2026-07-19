@@ -1,0 +1,16 @@
+[
+  {
+    "name": "MQTT-Test-Device",
+    "profileName": "MQTT-Test-Profile",
+    "description": "Test device that publishes data to the gateway's embedded MQTT broker",
+    "labels": [
+      "MQTT",
+      "TEST"
+    ],
+    "protocols": {
+      "mqtt": {
+        "Enabled": "true"
+      }
+    }
+  }
+]

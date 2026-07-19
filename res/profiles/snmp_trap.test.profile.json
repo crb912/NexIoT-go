@@ -1,0 +1,30 @@
+{
+  "name": "SNMP-Trap-Test-Profile",
+  "manufacturer": "Generic",
+  "model": "SIM-SNMP-TRAP",
+  "labels": ["SNMP", "TRAP", "TEST"],
+  "description": "Profile for SNMP trap push devices",
+  "deviceResources": [
+    {
+      "name": "1-3-6-1-2-1-1-3-0",
+      "isHidden": false,
+      "description": "sysUpTime",
+      "properties": { "valueType": "Uint64", "readWrite": "R" },
+      "attributes": { "address": "1.3.6.1.2.1.1.3.0" }
+    },
+    {
+      "name": "1-3-6-1-4-1-99999-1-1-0",
+      "isHidden": false,
+      "description": "Temperature reading in Celsius",
+      "properties": { "valueType": "Float64", "readWrite": "R", "defaultValue": "25.0" },
+      "attributes": { "address": "1.3.6.1.4.1.99999.1.1.0" }
+    },
+    {
+      "name": "1-3-6-1-4-1-99999-1-2-0",
+      "isHidden": false,
+      "description": "Alarm status string",
+      "properties": { "valueType": "String", "readWrite": "R", "defaultValue": "normal" },
+      "attributes": { "address": "1.3.6.1.4.1.99999.1.2.0" }
+    }
+  ]
+}

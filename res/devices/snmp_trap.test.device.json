@@ -1,0 +1,19 @@
+[
+  {
+    "name": "SNMP-Trap-Test-Device",
+    "profileName": "SNMP-Trap-Test-Profile",
+    "description": "Test device that sends SNMP traps to the gateway",
+    "labels": ["SNMP", "TRAP", "TEST"],
+    "protocols": {
+      "snmp": {
+        "Enabled": "true",
+        "Endpoint": "udp://127.0.0.1:162",
+        "Address": "127.0.0.1",
+        "Port": "162",
+        "Transport": "udp",
+        "SnmpVersion": "v2c",
+        "Community": "public"
+      }
+    }
+  }
+]

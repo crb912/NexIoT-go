@@ -150,7 +150,6 @@ UseMessageBus = true
 
 #Example structured custom configuration
 [SimpleCustom]
-OnImageLocation = "./res/custom/battery.json"
-OffImageLocation = "./res/custom/battery.json"
-  [SimpleCustom.Writable]
-  DiscoverSleepDurationSecs = 10
+ListenerConfigPath = "./res/custom/listener.json"
+[SimpleCustom.Writable]
+DiscoverSleepDurationSecs = 10
