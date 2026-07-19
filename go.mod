@@ -1,4 +1,4 @@
-module devices-iot-go
+module next-iot-go
 
 go 1.23
 

@@ -1,8 +1,8 @@
 package modbus
 
 import (
-	"devices-iot-go/pkg/conv"
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/conv"
+	"next-iot-go/pkg/model"
 	"errors"
 	"fmt"
 	"sync"

@@ -4,10 +4,10 @@
 package protocol
 
 import (
-	"devices-iot-go/pkg/adapter/modbus"
-	"devices-iot-go/pkg/adapter/opcua"
-	"devices-iot-go/pkg/adapter/snmp"
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/adapter/modbus"
+	"next-iot-go/pkg/adapter/opcua"
+	"next-iot-go/pkg/adapter/snmp"
+	"next-iot-go/pkg/model"
 	"errors"
 	"fmt"
 	"sync"

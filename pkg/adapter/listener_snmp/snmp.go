@@ -4,7 +4,7 @@
 package listener_snmp
 
 import (
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/model"
 	"encoding/json"
 	"fmt"
 	"net"

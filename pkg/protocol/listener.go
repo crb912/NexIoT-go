@@ -2,10 +2,10 @@ package protocol
 
 import (
 	"context"
-	"devices-iot-go/pkg/adapter/listener_http"
-	"devices-iot-go/pkg/adapter/listener_mqtt"
-	"devices-iot-go/pkg/adapter/listener_snmp"
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/adapter/listener_http"
+	"next-iot-go/pkg/adapter/listener_mqtt"
+	"next-iot-go/pkg/adapter/listener_snmp"
+	"next-iot-go/pkg/model"
 	"fmt"
 	"sync"
 	"time"

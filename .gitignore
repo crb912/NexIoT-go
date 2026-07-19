@@ -34,4 +34,6 @@ go.work.sum
 # DeepSeek TUI memory
 .mem/
 .codewhale/
-bin/devices-iot-go
+bin/next-iot-go
+
+.tmp/

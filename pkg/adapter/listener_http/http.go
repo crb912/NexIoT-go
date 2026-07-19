@@ -2,7 +2,7 @@ package listener_http
 
 import (
 	"context"
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/model"
 	"encoding/json"
 	"errors"
 	"fmt"

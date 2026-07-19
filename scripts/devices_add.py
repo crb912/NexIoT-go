@@ -16,7 +16,7 @@ devices_dir = (script_dir / "../res/devices").resolve()
 padding_data = {
     "adminState": "UNLOCKED",
     "operatingState": "UP",
-    "serviceName": "devices-iot-go"
+    "serviceName": "next-iot-go"
 }
 
 def wrap_devices(file_data) -> list:

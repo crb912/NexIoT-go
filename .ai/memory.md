@@ -1,4 +1,4 @@
-# Hermes-Edge — Project Memory
+# NexIoT — Project Memory
 
 > Full context for future LLM sessions. Read this file to restore all project knowledge.
 

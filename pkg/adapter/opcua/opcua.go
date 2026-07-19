@@ -4,8 +4,8 @@ package opcua
 
 import (
 	"context"
-	"devices-iot-go/pkg/conv"
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/conv"
+	"next-iot-go/pkg/model"
 	"fmt"
 	"sync"
 	"time"

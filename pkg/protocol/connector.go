@@ -1,8 +1,8 @@
 package protocol
 
 import (
-	"devices-iot-go/pkg/model"
-	"devices-iot-go/pkg/parser"
+	"next-iot-go/pkg/model"
+	"next-iot-go/pkg/parser"
 	"fmt"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"

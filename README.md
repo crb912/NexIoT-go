@@ -1,4 +1,6 @@
-`devices-iot-go-go`(IoT Edge) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
+# NexIoT-go: Multi-Protocol Industrial IoT Edge Gateway
+
+`next-iot-go`(NexIoT-go) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
 
 Key Features:
 - Multi-Protocol: Out-of-the-box support for Modbus, SNMP, OPC, HTTP, and MQTT.
@@ -102,8 +104,8 @@ API:
 ### Start Device Services
 
 ```shell
-git clone git@github.com:crb912/devices-iot-go.git
-cd devices-iot-go
+git clone git@github.com:crb912/next-iot-go.git
+cd next-iot-go
 go mod tidy
 
 # Run with dev mode

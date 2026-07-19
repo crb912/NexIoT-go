@@ -1,7 +1,7 @@
 package listener_mqtt
 
 import (
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/model"
 	"fmt"
 	"sync"
 	"time"

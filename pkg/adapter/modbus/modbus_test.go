@@ -2,7 +2,7 @@
 package modbus
 
 import (
-	"devices-iot-go/pkg/model"
+	"next-iot-go/pkg/model"
 	"errors"
 	"fmt"
 	"strings"

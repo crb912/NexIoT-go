@@ -3,8 +3,8 @@ package driver
 
 import (
 	"context"
-	"devices-iot-go/pkg/model"
-	"devices-iot-go/pkg/protocol"
+	"next-iot-go/pkg/model"
+	"next-iot-go/pkg/protocol"
 	"encoding/json"
 	"errors"
 	"fmt"

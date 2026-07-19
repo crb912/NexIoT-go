@@ -10,11 +10,11 @@ DIR=$PWD
 BIN=../bin
 
 function cleanup {
-	pkill devices-iot-go
+	pkill next-iot-go
 }
 
 cd $BIN
-exec -a devices-iot-go ./devices-iot-go &
+exec -a next-iot-go ./next-iot-go &
 cd $DIR
 
 

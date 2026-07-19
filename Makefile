@@ -1,6 +1,6 @@
 .PHONY: help build dev prod simulator stop-simulator test test-cover lint vet fmt tidy clean vendor init check
 
-SERVICE_NAME := devices-iot-go
+SERVICE_NAME := next-iot-go
 BINARY       := ./bin/$(SERVICE_NAME)
 ARCH         := $(shell uname -m)
 
