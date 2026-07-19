@@ -1,0 +1,1 @@
+openssl enc -aes-256-cbc -d -pbkdf2 -pass pass:2026 -in .ai/.tmp.tar.gz.enc | tar -xzf -
