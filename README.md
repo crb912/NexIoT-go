@@ -3,11 +3,11 @@
 NexIoT-go (`next-iot-go`) is a flexible, multi-protocol IoT edge gateway built on [edgexfoundry/edgex-go](https://github.com/edgexfoundry/edgex-go). It enables bi-directional communication (read/write) for southbound devices and supports both active polling and passive data ingestion.
 
 Key Features:
-- Multi-Protocol: Out-of-the-box support for Modbus, SNMP, OPC, HTTP, and MQTT.
-- Bi-Directional Operations: Supports both reading device resources and writing control commands.
-- Dual Ingestion Modes: Supports active scheduling/polling and passive data pushing from devices.
-- Configuration-Driven: Flexible read/write operations fully managed via configuration files.
-- Highly Extensible: Designed for easy integration of additional standard or proprietary protocols.
+- Multi-Protocol: Out-of-the-box support for **Modbus, SNMP, OPC, HTTP, and MQTT**.
+- Bi-Directional Operations: Supports both **reading** device resources and **writing** control commands.
+- Dual Ingestion Modes: Supports **active** scheduling/polling and **passive** data pushing from devices.
+- Configuration-Driven: **Flexible** read/write operations fully managed via configuration files.
+- Highly **Extensible**: Designed for easy integration of additional standard or proprietary protocols.
 
 
 ## Table of Contents
@@ -59,12 +59,6 @@ Key Features:
 │       - Listens and receives inbound data.                           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
-
-**Architecture Design Highlights:**
-
-- **High Cohesion & Low Coupling**: The architecture strictly separates connection management (Conection layer) from data parsing and protocol behavior (Adapter layer). This provides a highly maintainable and standardized layered design.
-- **Maximum Reusability**: By isolating pkg/parser as an independent logic package, both the payloads actively pulled by the poller and the messages passively received by the receiver share the exact same parsing logic. This completely eliminates code dupcliation.
-- **Asynchronous Decoupling**: The Core Driver layer injects EdgeX's asynchronous data channels into the lower layers. As a result, the underlying Poller and Receiver only focus on processing and sending data without needing to know the upstream state. This aligns perfectly with Go's channel-based concurrency philosophy.
 
 ## Quick Start
 
