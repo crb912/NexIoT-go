@@ -48,7 +48,7 @@ deviceResources:
     properties:
       valueType: "String"
       readWrite: "R"
-      defaultValue: "AA:BB:CC"
+      defaultValue: "AA:BB:CC:DD:EE:FF"
   -
     name: FirmwareCurrentState
     description: "Switch firmware version"
